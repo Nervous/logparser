@@ -46,3 +46,35 @@ export function flagLabel(flag: string): string {
 export function flagsRegexFor(keys: string[]): string {
   return [...new Set(keys)].map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
 }
+
+// Group the ~180 raw flags into a handful of browsable categories (first rule wins).
+export interface Category { key: string; label: string }
+export const CATEGORIES: Category[] = [
+  { key: "chat", label: "Chat & Communication" },
+  { key: "admin", label: "Admin & Anti-Cheat" },
+  { key: "money", label: "Economy & Money" },
+  { key: "vehicles", label: "Vehicles" },
+  { key: "property", label: "Property & Objects" },
+  { key: "jobs", label: "Jobs & Activities" },
+  { key: "crime", label: "Crime & Illegal" },
+  { key: "faction", label: "Factions" },
+  { key: "character", label: "Character & Roleplay" },
+  { key: "system", label: "System & Other" },
+];
+
+const CATEGORY_RULES: [string, RegExp][] = [
+  ["chat", /chat|phone|voice|boombox|sms|message|noticeboard|discord|mail/],
+  ["admin", /admin|alert|anticheat|aimmonitor|watchlist|report|rpqm|staff|\bdev\b|specialcommand|commandalias|command$|^command/],
+  ["money", /money|bank|atm|casino|shop|business|paycheck|transfer|pricing|donat|points|lucky|poker|fleeca/],
+  ["vehicles", /veh|chop|flatbed|garage|fuel|charger|\btow\b|els|siren|racing|golfcart|subwoofer|lightbar/],
+  ["property", /propert|furniture|interior|door|safe|container|objectspawner|permanentobject|locker|graffiti|billboard|device|smartteleport|maplocation/],
+  ["jobs", /^job|jobs|trucking|mailman|hunt|garbage|brewery|driving|livestock|garden|mining|fish|petrol|weaponsupplier|courier|dock|farming/],
+  ["crime", /drug|weed|blackmarket|darkweb|traphouse|hidden|weapon|skimmer|metal|lootkit|robber|jail|arrest|prison|evidence|forensic|gun|shooting|airsoft|xmr/],
+  ["faction", /organization|faction/],
+  ["character", /character|changechar|death|blood|injur|medic|medication|morgue|tattoo|mask|customization|anim|focus|idcard|license|gym|graffiti|hunger|charactercreator/],
+];
+
+export function categorize(flag: string): string {
+  for (const [key, re] of CATEGORY_RULES) if (re.test(flag)) return key;
+  return "system";
+}

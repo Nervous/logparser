@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Loader2, Download, Lock, FileDown, X } from "lucide-react";
+import { CATEGORIES, categorize } from "@/lib/logTypes";
 
 interface LogTypeOpt { key: string; label: string; allowed: boolean }
 interface Entry { ts: number; server: string; flag: string; line: string }
@@ -251,12 +252,24 @@ function TypePicker({
   setSelected: (s: Set<string>) => void;
 }) {
   const [search, setSearch] = useState("");
-  const shown = logTypes.filter((t) => !search || t.key.includes(search.toLowerCase()));
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const authorized = logTypes.filter((t) => t.allowed);
+  const s = search.toLowerCase();
+
+  // group flags by category, honouring CATEGORIES order
+  const groups = CATEGORIES.map((c) => ({
+    ...c,
+    items: logTypes.filter((t) => categorize(t.key) === c.key && (!s || t.key.includes(s))),
+  })).filter((g) => g.items.length > 0);
 
   function toggle(k: string) {
     const n = new Set(selected);
     n.has(k) ? n.delete(k) : n.add(k);
+    setSelected(n);
+  }
+  function toggleCategory(items: LogTypeOpt[], on: boolean) {
+    const n = new Set(selected);
+    for (const t of items) if (t.allowed) (on ? n.add(t.key) : n.delete(t.key));
     setSelected(n);
   }
 
@@ -269,27 +282,40 @@ function TypePicker({
         <button onClick={() => setSelected(new Set(authorized.map((t) => t.key)))} className="rounded px-1.5 py-0.5 text-[10px] text-accent-2 hover:bg-bg-elev">all</button>
         <button onClick={() => setSelected(new Set())} className="rounded px-1.5 py-0.5 text-[10px] text-text-dim hover:bg-bg-elev">none</button>
       </div>
-      <div className="grid max-h-40 grid-cols-2 gap-x-3 gap-y-0.5 overflow-auto p-2 sm:grid-cols-3">
-        {shown.map((t) => {
-          const on = selected.has(t.key);
+      <div className="max-h-64 overflow-auto p-1.5">
+        {groups.map((g) => {
+          const sel = g.items.filter((t) => selected.has(t.key)).length;
+          const allSel = sel > 0 && sel === g.items.filter((t) => t.allowed).length;
+          const expanded = open.has(g.key) || !!s;
           return (
-            <button
-              key={t.key}
-              disabled={!t.allowed}
-              onClick={() => toggle(t.key)}
-              title={t.allowed ? t.key : "Not authorized — needs approval"}
-              className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[11px] ${
-                !t.allowed ? "cursor-not-allowed text-text-dim opacity-50"
-                  : on ? "text-text" : "text-text-dim hover:text-text"
-              }`}
-            >
-              <span className={`flex h-3.5 w-3.5 flex-none items-center justify-center rounded-sm border text-[9px] ${on ? "border-accent-2 bg-accent-2 text-black" : "border-text-dim"}`}>{on ? "✓" : ""}</span>
-              {!t.allowed && <Lock size={9} className="flex-none text-warn" />}
-              <span className="truncate">{t.key}</span>
-            </button>
+            <div key={g.key} className="mb-0.5">
+              <div className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-bg-elev">
+                <button onClick={() => { const n = new Set(open); n.has(g.key) ? n.delete(g.key) : n.add(g.key); setOpen(n); }} className="flex flex-1 items-center gap-1.5 text-left">
+                  <span className="text-text-dim">{expanded ? "▾" : "▸"}</span>
+                  <span className="text-xs font-medium">{g.label}</span>
+                  <span className="text-[10px] text-text-dim">{sel}/{g.items.length}</span>
+                </button>
+                <button onClick={() => toggleCategory(g.items, !allSel)} className={`rounded px-1.5 py-0.5 text-[10px] ${allSel ? "bg-accent-2/20 text-accent-2" : "text-text-dim hover:text-text"}`}>{allSel ? "clear" : "all"}</button>
+              </div>
+              {expanded && (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 py-1 pl-5 sm:grid-cols-3">
+                  {g.items.map((t) => {
+                    const on = selected.has(t.key);
+                    return (
+                      <button key={t.key} disabled={!t.allowed} onClick={() => toggle(t.key)} title={t.allowed ? t.key : "Not authorized — needs approval"}
+                        className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[11px] ${!t.allowed ? "cursor-not-allowed text-text-dim opacity-50" : on ? "text-text" : "text-text-dim hover:text-text"}`}>
+                        <span className={`flex h-3.5 w-3.5 flex-none items-center justify-center rounded-sm border text-[9px] ${on ? "border-accent-2 bg-accent-2 text-black" : "border-text-dim"}`}>{on ? "✓" : ""}</span>
+                        {!t.allowed && <Lock size={9} className="flex-none text-warn" />}
+                        <span className="truncate">{t.key}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
-        {shown.length === 0 && <span className="col-span-full py-2 text-center text-[11px] text-text-dim">no match</span>}
+        {groups.length === 0 && <span className="block py-2 text-center text-[11px] text-text-dim">no match</span>}
       </div>
     </div>
   );
