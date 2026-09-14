@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { REGIONS } from "@/lib/regions";
 
@@ -8,9 +9,18 @@ import { REGIONS } from "@/lib/regions";
 // the correct UCP SSO. (Requirement: "admin will choose before connecting their language /
 // server so it chooses the proper ucp connection sso".)
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [regionKey, setRegionKey] = useState<string | null>(null);
   const region = REGIONS.find((r) => r.key === regionKey);
   const [busy, setBusy] = useState(false);
+  const error = useSearchParams().get("error");
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
@@ -27,6 +37,14 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-text-soft">
             Choose your server, then sign in through its UCP.
           </p>
+
+          {error && (
+            <p className="mt-4 rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">
+              {error === "not_authorized"
+                ? "Your account must be Admin Level 1 or above to access the Log Explorer."
+                : "Sign-in failed. Please try again."}
+            </p>
+          )}
 
           <div className="mt-5">
             <label className="text-xs font-medium uppercase tracking-wider text-text-dim">Server</label>

@@ -19,6 +19,7 @@ model User {
   region        String                                // en / fr / es / tr / kr — the UCP they signed in through
   username      String                                // UCP username
   discordName   String?
+  adminLevel    Int       @default(0)                 // UCP AdminLevel at last login (0 = player)
   isManager     Boolean   @default(false)            // can edit role permissions for their region
   isSuperAdmin  Boolean   @default(false)            // cross-region (staff management)
   lastLogin     DateTime?

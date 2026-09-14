@@ -2,13 +2,14 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers";
 import { REGIONS, type RegionKey } from "@/lib/regions";
 import { prisma } from "@/lib/prisma";
+import { canSSO, isManagerLevel } from "@/lib/adminLevels";
 
 interface UcpProfile {
   id: number;
   username?: string;
   name?: string;
   discord_username?: string;
-  admin_level?: number;
+  admin?: number; // UCP AdminLevel enum value (0 = player)
 }
 
 // One OAuth provider per region, each pointed at that region's UCP (Laravel Passport).
@@ -32,6 +33,7 @@ function ucpProvider(region: RegionKey): OAuthConfig<UcpProfile> {
         ucpId: p.id,
         region,
         discordName: p.discord_username ?? null,
+        adminLevel: Number(p.admin ?? 0),
       } as unknown as { id: string; name: string };
     },
   };
@@ -45,13 +47,27 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     async signIn({ user, account }) {
       const region = account?.provider?.replace("ucp-", "");
-      // upsert the local user record keyed by (region, ucpId)
-      const u = user as unknown as { ucpId: number; region: string; name: string; discordName?: string };
+      const u = user as unknown as {
+        ucpId: number; region: string; name: string; discordName?: string; adminLevel?: number;
+      };
       if (!region || !u.ucpId) return false;
+
+      // GATE: Admin Level 1 minimum (rank-based). Regular players, Support and Trial Admin are
+      // rejected at the door — before any log data is reachable. Fail-closed on missing level.
+      const level = Number(u.adminLevel ?? 0);
+      if (!canSSO(level)) return "/login?error=not_authorized";
+
+      // Managers (Manager+) may edit their region's role permissions; never auto-grant superadmin.
       await prisma.user.upsert({
         where: { region_ucpId: { region, ucpId: u.ucpId } },
-        create: { region, ucpId: u.ucpId, username: u.name, discordName: u.discordName ?? null, lastLogin: new Date() },
-        update: { username: u.name, discordName: u.discordName ?? null, lastLogin: new Date() },
+        create: {
+          region, ucpId: u.ucpId, username: u.name, discordName: u.discordName ?? null,
+          adminLevel: level, isManager: isManagerLevel(level), lastLogin: new Date(),
+        },
+        update: {
+          username: u.name, discordName: u.discordName ?? null,
+          adminLevel: level, isManager: isManagerLevel(level), lastLogin: new Date(),
+        },
       });
       return true;
     },

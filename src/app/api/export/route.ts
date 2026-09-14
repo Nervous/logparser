@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { effectivePermissions, splitByAuthorization } from "@/lib/rbac";
 import { LOG_TYPE_KEYS } from "@/lib/logTypes";
 import { runExport } from "@/lib/exportRunner";
+import { getRegion } from "@/lib/regions";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -12,7 +13,15 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Bad request" }, { status: 400 });
 
-  const server: string = String(body.server ?? session.user.region);
+  // COMMUNITY ISOLATION: the region is ALWAYS the user's SSO region — never taken from the
+  // request — and the chosen server must belong to that region. A user can only ever reach
+  // their own community's logs.
+  const region = session.user.region;
+  const allowedServers = new Set((getRegion(region)?.servers ?? []).map((s) => s.key));
+  const server: string = String(body.server ?? region);
+  if (!allowedServers.has(server))
+    return NextResponse.json({ error: "Invalid server for your community" }, { status: 403 });
+
   const terms: string[] = Array.isArray(body.terms) ? body.terms.map(String).filter(Boolean) : [];
   const logTypes: string[] = Array.isArray(body.logTypes)
     ? body.logTypes.map(String).filter((k: string) => LOG_TYPE_KEYS.includes(k))
