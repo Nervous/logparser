@@ -31,10 +31,16 @@ export async function GET(req: Request) {
   const selected = (requested.length ? requested.filter((k) => allowedKeys.includes(k)) : allowedKeys);
 
   const q = url.searchParams.get("q")?.trim() ?? "";
-  const range = url.searchParams.get("range") ?? "6h";
   const now = Date.now();
-  const toMs = now;
-  const fromMs = now - (RANGES[range] ?? RANGES["6h"]);
+  // Custom window (from/to, ISO or epoch-ms) overrides the preset range when both are valid.
+  const fromParam = url.searchParams.get("from");
+  const toParam = url.searchParams.get("to");
+  const cf = fromParam ? Date.parse(fromParam) : NaN;
+  const ct = toParam ? Date.parse(toParam) : NaN;
+  const custom = !isNaN(cf) && !isNaN(ct) && cf < ct;
+  const range = custom ? "custom" : (url.searchParams.get("range") ?? "6h");
+  const toMs = custom ? ct : now;
+  const fromMs = custom ? cf : now - (RANGES[range] ?? RANGES["6h"]);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 200), 1000);
 
   if (selected.length === 0) {

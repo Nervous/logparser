@@ -8,7 +8,7 @@ interface Entry { ts: number; server: string; flag: string; line: string }
 interface Vol { t: number; count: number }
 
 const RANGES = ["15m", "1h", "6h", "24h", "7d", "30d"] as const;
-type Range = (typeof RANGES)[number];
+type Range = (typeof RANGES)[number] | "custom";
 
 // Fetch the current user's allowed groups + seeAll for one server (permissions are per-server).
 async function fetchPerm(server: string): Promise<{ allowed: string[]; seeAll: boolean }> {
@@ -29,6 +29,8 @@ export default function Explorer({
   const [server, setServer] = useState(servers[0]?.key ?? region);
   const [perm, setPerm] = useState<{ allowed: Set<string>; seeAll: boolean }>({ allowed: new Set(), seeAll: false });
   const [range, setRange] = useState<Range>("6h");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [q, setQ] = useState("");
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [data, setData] = useState<{ entries: Entry[]; volume: Vol[]; total: number } | null>(null);
@@ -57,16 +59,19 @@ export default function Explorer({
   }, [server, baseLogTypes]);
 
   const load = useCallback(async () => {
+    if (range === "custom" && (!customFrom || !customTo)) return; // wait for both dates
     setLoading(true);
     try {
-      const p = new URLSearchParams({ server, range, q, types: [...types].join(",") });
+      const p = new URLSearchParams({ server, q, types: [...types].join(",") });
+      if (range === "custom") { p.set("from", customFrom); p.set("to", customTo); }
+      else p.set("range", range);
       const res = await fetch(`/api/explore?${p}`);
       const j = await res.json();
       if (res.ok) setData({ entries: j.entries ?? [], volume: j.volume ?? [], total: j.total ?? 0 });
     } finally {
       setLoading(false);
     }
-  }, [server, range, q, types]);
+  }, [server, range, q, types, customFrom, customTo]);
 
   useEffect(() => {
     clearTimeout(debounce.current);
@@ -112,8 +117,20 @@ export default function Explorer({
             {RANGES.map((r) => (
               <button key={r} onClick={() => setRange(r)} className={`px-3 py-2 text-xs ${range === r ? "bg-accent-2 text-white" : "bg-bg-elev-2 text-text-soft hover:text-text"}`}>{r}</button>
             ))}
+            <button onClick={() => setRange("custom")} className={`px-3 py-2 text-xs ${range === "custom" ? "bg-accent-2 text-white" : "bg-bg-elev-2 text-text-soft hover:text-text"}`}>custom</button>
           </div>
         </div>
+        {range === "custom" && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-text-soft">
+            <span>From</span>
+            <input type="datetime-local" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+              className="rounded-lg border border-border bg-bg-elev-2 px-2 py-1.5 outline-none focus:border-accent-2" />
+            <span>To</span>
+            <input type="datetime-local" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+              className="rounded-lg border border-border bg-bg-elev-2 px-2 py-1.5 outline-none focus:border-accent-2" />
+            {(!customFrom || !customTo) && <span className="text-text-dim">pick both dates to load</span>}
+          </div>
+        )}
         <TypePicker logTypes={logTypes} selected={types} setSelected={setTypes} />
       </div>
 
@@ -217,6 +234,26 @@ function RequestModal({
   );
   const needsApproval = [...selected].some((k) => !logTypes.find((t) => t.key === k)?.allowed);
 
+  function addTerm() {
+    const v = ti.trim();
+    if (!v) return;
+    setTerms([...new Set([...terms, v])]);
+    setTi("");
+  }
+  // datetime-local value for a Date, in local time (YYYY-MM-DDTHH:mm)
+  function toLocalInput(d: Date): string {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  function setPreset(ms: number) {
+    const now = new Date();
+    setTo(toLocalInput(now));
+    setFrom(toLocalInput(new Date(now.getTime() - ms)));
+  }
+  const DATE_PRESETS: [string, number][] = [
+    ["24h", 24 * 3600e3], ["7d", 7 * 24 * 3600e3], ["30d", 30 * 24 * 3600e3], ["90d", 90 * 24 * 3600e3],
+  ];
+
   async function submit() {
     setMsg(null);
     if (!terms.length) return setMsg({ k: "err", t: "Add a character name / term." });
@@ -246,8 +283,10 @@ function RequestModal({
 
         <label className="mt-4 block text-xs uppercase tracking-wider text-text-dim">Character(s) / terms</label>
         <div className="mt-1 flex gap-2">
-          <input value={ti} onChange={(e) => setTi(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), ti.trim() && (setTerms([...new Set([...terms, ti.trim()])]), setTi("")))} placeholder="Adam Akhmetzyanov" className="flex-1 rounded-lg border border-border bg-bg-elev-2 px-3 py-2 text-sm outline-none focus:border-accent-2" />
+          <input value={ti} onChange={(e) => setTi(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTerm(); } }} placeholder="e.g. Adam Akhmetzyanov" className="flex-1 rounded-lg border border-border bg-bg-elev-2 px-3 py-2 text-sm outline-none focus:border-accent-2" />
+          <button type="button" onClick={addTerm} disabled={!ti.trim()} className="rounded-lg border border-accent-2/60 px-3 py-2 text-sm text-accent-2 hover:bg-accent-2/10 disabled:opacity-40">Add</button>
         </div>
+        <p className="mt-1 text-[11px] text-text-dim">Type a name and press Enter (or click Add) to add it as a chip. Add several to match any of them.</p>
         {terms.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {terms.map((t) => (
@@ -259,9 +298,16 @@ function RequestModal({
         <label className="mt-4 block text-xs uppercase tracking-wider text-text-dim">Log types</label>
         <div className="mt-1"><TypePicker logTypes={logTypes} selected={selected} setSelected={setSelected} /></div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div><label className="block text-xs uppercase tracking-wider text-text-dim">From</label><input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-elev-2 px-2 py-2 text-sm outline-none focus:border-accent-2" /></div>
-          <div><label className="block text-xs uppercase tracking-wider text-text-dim">To</label><input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-elev-2 px-2 py-2 text-sm outline-none focus:border-accent-2" /></div>
+        <label className="mt-4 block text-xs uppercase tracking-wider text-text-dim">Timeframe</label>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {DATE_PRESETS.map(([lbl, ms]) => (
+            <button key={lbl} type="button" onClick={() => setPreset(ms)}
+              className="rounded-lg border border-border bg-bg-elev-2 px-2.5 py-1 text-xs text-text-soft hover:border-accent-2 hover:text-text">Last {lbl}</button>
+          ))}
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <div><label className="block text-[11px] uppercase tracking-wider text-text-dim">From</label><input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-elev-2 px-2 py-2 text-sm outline-none focus:border-accent-2" /></div>
+          <div><label className="block text-[11px] uppercase tracking-wider text-text-dim">To</label><input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-elev-2 px-2 py-2 text-sm outline-none focus:border-accent-2" /></div>
         </div>
         <select value={server} onChange={(e) => setServer(e.target.value)} className="mt-3 w-full rounded-lg border border-border bg-bg-elev-2 px-3 py-2 text-sm outline-none focus:border-accent-2">
           {servers.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
