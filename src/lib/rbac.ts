@@ -1,18 +1,23 @@
 import { prisma } from "./prisma";
 
+// Reserved logTypeKey meaning "Can See All Activity" for that (role, server).
+export const SEE_ALL_KEY = "__all__";
+
 export interface EffectivePermissions {
-  allowed: Set<string>; // log-type keys the user may view
-  seeAll: boolean; // "Can See All Activity" — bypasses per-type checks
+  allowed: Set<string>; // group keys the user may view on this server
+  seeAll: boolean; // bypasses per-group checks (manager/super, or role see-all on this server)
   isManager: boolean;
   isSuperAdmin: boolean;
 }
 
-// A user's effective log-type permissions = the UNION of their roles' allowed types
-// (per-role model). seeAll on any role grants everything.
-export async function effectivePermissions(userId: number): Promise<EffectivePermissions> {
+// A user's effective permissions ON ONE SERVER = the UNION of their roles' allowed groups for that
+// server. Permissions are per-server, so the same rank can see different logs on EN-Text vs EN-Voice.
+export async function effectivePermissions(userId: number, server: string): Promise<EffectivePermissions> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { roles: { include: { role: { include: { permissions: true } } } } },
+    include: {
+      roles: { include: { role: { include: { permissions: { where: { server } } } } } },
+    },
   });
   const allowed = new Set<string>();
   let seeAll = false;
@@ -20,11 +25,13 @@ export async function effectivePermissions(userId: number): Promise<EffectivePer
     // Managers and super-admins see everything by default (they also administer permissions).
     if (user.isManager || user.isSuperAdmin) seeAll = true;
     for (const ur of user.roles) {
-      if (ur.role.seeAll) seeAll = true;
-      for (const p of ur.role.permissions) if (p.allowed) allowed.add(p.logTypeKey);
+      for (const p of ur.role.permissions) {
+        if (!p.allowed) continue;
+        if (p.logTypeKey === SEE_ALL_KEY) seeAll = true;
+        else allowed.add(p.logTypeKey);
+      }
     }
   }
-  // seeAll is a flag consumers honour directly (flags are dynamic; we don't enumerate them here).
   return {
     allowed,
     seeAll,
@@ -33,7 +40,7 @@ export async function effectivePermissions(userId: number): Promise<EffectivePer
   };
 }
 
-// Split requested log types into the ones the user may run now vs the ones that need approval.
+// Split requested groups into the ones the user may run now vs the ones that need approval.
 export function splitByAuthorization(
   requested: string[],
   perms: EffectivePermissions,

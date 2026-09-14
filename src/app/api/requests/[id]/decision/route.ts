@@ -23,7 +23,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // authority: manager/superadmin, or holds all the unauthorized types
-  const perms = await effectivePermissions(u.uid);
+  const perms = await effectivePermissions(u.uid, reqRow.server);
   const needed: string[] = JSON.parse(reqRow.unauthorizedTypes);
   const canApprove = u.isManager || u.isSuperAdmin || perms.seeAll || needed.every((k) => perms.allowed.has(k));
   if (!canApprove) return NextResponse.json({ error: "Not authorized to approve these log types" }, { status: 403 });

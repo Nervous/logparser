@@ -13,14 +13,14 @@ export async function GET() {
   const users = await prisma.user.findMany({
     where: u.isSuperAdmin ? {} : { region: u.region },
     orderBy: [{ region: "asc" }, { adminLevel: "desc" }, { username: "asc" }],
-    include: { roles: { include: { role: { select: { name: true, seeAll: true } } } } },
+    include: { roles: { include: { role: { select: { name: true } } } } },
     take: 2000,
   });
 
   return NextResponse.json({
     users: users.map((usr) => {
       const roleNames = usr.roles.map((r) => r.role.name);
-      const seeAll = usr.isManager || usr.isSuperAdmin || usr.roles.some((r) => r.role.seeAll);
+      const seeAll = usr.isManager || usr.isSuperAdmin; // per-server grants live in Roles & Permissions
       return {
         id: usr.id,
         region: usr.region,

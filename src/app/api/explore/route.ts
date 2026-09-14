@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   const server = url.searchParams.get("server") ?? region;
   if (!allowedServers.has(server)) return NextResponse.json({ error: "Invalid server" }, { status: 403 });
 
-  const perms = await effectivePermissions(session.user.uid);
+  const perms = await effectivePermissions(session.user.uid, server);
   const groups = groupOptions();
   const allowedKeys = groups.filter((g) => perms.seeAll || perms.allowed.has(g.key)).map((g) => g.key);
 

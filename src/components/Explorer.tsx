@@ -10,23 +10,51 @@ interface Vol { t: number; count: number }
 const RANGES = ["15m", "1h", "6h", "24h", "7d", "30d"] as const;
 type Range = (typeof RANGES)[number];
 
+// Fetch the current user's allowed groups + seeAll for one server (permissions are per-server).
+async function fetchPerm(server: string): Promise<{ allowed: string[]; seeAll: boolean }> {
+  try {
+    const res = await fetch(`/api/permissions?server=${encodeURIComponent(server)}`);
+    if (res.ok) return await res.json();
+  } catch {}
+  return { allowed: [], seeAll: false };
+}
+
 export default function Explorer({
-  region, servers, logTypes, seeAll,
+  region, servers, logTypes: baseLogTypes,
 }: {
   region: string;
   servers: { key: string; label: string }[];
   logTypes: LogTypeOpt[];
-  seeAll: boolean;
 }) {
-  const authorized = logTypes.filter((t) => t.allowed);
   const [server, setServer] = useState(servers[0]?.key ?? region);
+  const [perm, setPerm] = useState<{ allowed: Set<string>; seeAll: boolean }>({ allowed: new Set(), seeAll: false });
   const [range, setRange] = useState<Range>("6h");
   const [q, setQ] = useState("");
-  const [types, setTypes] = useState<Set<string>>(new Set(authorized.map((t) => t.key)));
+  const [types, setTypes] = useState<Set<string>>(new Set());
   const [data, setData] = useState<{ entries: Entry[]; volume: Vol[]; total: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // effective per-server allowed flags on the group catalogue
+  const logTypes = useMemo(
+    () => baseLogTypes.map((t) => ({ ...t, allowed: perm.seeAll || perm.allowed.has(t.key) })),
+    [baseLogTypes, perm],
+  );
+  const authorized = logTypes.filter((t) => t.allowed);
+
+  // (re)load permissions when the server changes; default the selection to all authorized groups
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const p = await fetchPerm(server);
+      if (!live) return;
+      const allowed = new Set(p.allowed);
+      setPerm({ allowed, seeAll: p.seeAll });
+      setTypes(new Set(p.seeAll ? baseLogTypes.map((t) => t.key) : p.allowed));
+    })();
+    return () => { live = false; };
+  }, [server, baseLogTypes]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -149,7 +177,7 @@ export default function Explorer({
         <RequestModal
           onClose={() => setBuilderOpen(false)}
           servers={servers}
-          logTypes={logTypes}
+          baseLogTypes={baseLogTypes}
           initial={{ server, terms: q ? [q] : [], types: [...types] }}
         />
       )}
@@ -157,16 +185,18 @@ export default function Explorer({
   );
 }
 
-// Export-request builder as a modal (prefilled from the current explorer view).
+// Export-request builder as a modal (prefilled from the current explorer view). It has its own
+// server selector, so it fetches per-server permissions itself.
 function RequestModal({
-  onClose, servers, logTypes, initial,
+  onClose, servers, baseLogTypes, initial,
 }: {
   onClose: () => void;
   servers: { key: string; label: string }[];
-  logTypes: LogTypeOpt[];
+  baseLogTypes: LogTypeOpt[];
   initial: { server: string; terms: string[]; types: string[] };
 }) {
   const [server, setServer] = useState(initial.server);
+  const [perm, setPerm] = useState<{ allowed: Set<string>; seeAll: boolean }>({ allowed: new Set(), seeAll: false });
   const [terms, setTerms] = useState<string[]>(initial.terms);
   const [ti, setTi] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set(initial.types));
@@ -174,6 +204,17 @@ function RequestModal({
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ k: "ok" | "queued" | "err"; t: string; id?: number } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetchPerm(server).then((p) => { if (live) setPerm({ allowed: new Set(p.allowed), seeAll: p.seeAll }); });
+    return () => { live = false; };
+  }, [server]);
+
+  const logTypes = useMemo(
+    () => baseLogTypes.map((t) => ({ ...t, allowed: perm.seeAll || perm.allowed.has(t.key) })),
+    [baseLogTypes, perm],
+  );
   const needsApproval = [...selected].some((k) => !logTypes.find((t) => t.key === k)?.allowed);
 
   async function submit() {

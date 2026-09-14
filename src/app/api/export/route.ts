@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   if (isNaN(+from) || isNaN(+to) || from >= to)
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
 
-  const perms = await effectivePermissions(session.user.uid);
+  const perms = await effectivePermissions(session.user.uid, server);
   const { unauthorized } = splitByAuthorization(logTypes, perms);
 
   const request = await prisma.exportRequest.create({

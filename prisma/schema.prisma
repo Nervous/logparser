@@ -39,7 +39,6 @@ model Role {
   key         String                                  // stable key, e.g. "admin", "senior", "trial"
   name        String
   rank        Int      @default(0)                    // higher = more senior; used for ordering
-  seeAll      Boolean  @default(false)                // "Can See All Activity"
   createdAt   DateTime @default(now())
   permissions RolePermission[]
   users       UserRole[]
@@ -58,15 +57,19 @@ model UserRole {
   @@unique([userId, roleId])
 }
 
-// The log categories a role may view. logTypeKey matches LogType.key in src/lib/logTypes.ts.
+// The log groups a role may view, PER SERVER instance. logTypeKey is a group key from
+// src/lib/logGroups.ts, or the reserved "__all__" key = "Can See All Activity" for that server.
+// A role's permissions differ across servers of the same region (e.g. EN-Text vs EN-Voice).
 model RolePermission {
   id         Int     @id @default(autoincrement())
   roleId     Int
+  server     String  @default("")
   logTypeKey String
   allowed    Boolean @default(false)
   role       Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
-  @@unique([roleId, logTypeKey])
+  @@unique([roleId, server, logTypeKey])
+  @@index([roleId, server])
 }
 
 enum RequestStatus {
