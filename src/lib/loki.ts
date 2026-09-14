@@ -79,6 +79,47 @@ export async function estimateCount(spec: QuerySpec): Promise<number> {
   return v ? Number(v) : 0;
 }
 
+// Recent matching lines (newest first) for the live explorer — bounded, single page.
+export async function searchRecent(spec: QuerySpec, limit = 200): Promise<LogEntry[]> {
+  const streams = await queryRange(
+    buildSelector(spec),
+    String(spec.fromMs) + "000000",
+    String(spec.toMs) + "000000",
+    Math.min(limit, PAGE),
+    "backward",
+  );
+  const out: LogEntry[] = [];
+  for (const s of streams) {
+    for (const [ns, line] of s.values) {
+      out.push({
+        ts: Math.floor(Number(ns) / 1e6),
+        line,
+        region: s.stream.region ?? spec.region,
+        server: s.stream.server ?? "",
+        flag: s.stream.flag ?? "",
+      });
+    }
+  }
+  out.sort((a, b) => b.ts - a.ts);
+  return out.slice(0, limit);
+}
+
+// Time-bucketed line counts for the volume chart. Returns [{ t: ms, count }].
+export async function volume(spec: QuerySpec, buckets = 48): Promise<{ t: number; count: number }[]> {
+  const rangeMs = Math.max(60000, spec.toMs - spec.fromMs);
+  const stepSec = Math.max(60, Math.floor(rangeMs / 1000 / buckets));
+  const url = new URL("/loki/api/v1/query_range", LOKI_URL);
+  url.searchParams.set("query", `sum(count_over_time(${buildSelector(spec)} [${stepSec}s]))`);
+  url.searchParams.set("start", String(spec.fromMs) + "000000");
+  url.searchParams.set("end", String(spec.toMs) + "000000");
+  url.searchParams.set("step", String(stepSec));
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return [];
+  const json = (await res.json()) as { data: { result: { values: [number, string][] }[] } };
+  const series = json.data.result?.[0]?.values ?? [];
+  return series.map(([t, v]) => ({ t: t * 1000, count: Number(v) || 0 }));
+}
+
 // Full paginated pull of every matching line in [fromMs, toMs], oldest→newest, capped.
 export async function fetchAll(spec: QuerySpec): Promise<LogEntry[]> {
   const query = buildSelector(spec);

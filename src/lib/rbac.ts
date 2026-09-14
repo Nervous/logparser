@@ -18,11 +18,12 @@ export async function effectivePermissions(userId: number): Promise<EffectivePer
   const allowed = new Set<string>();
   let seeAll = false;
   if (user) {
+    // Managers and super-admins see everything by default (they also administer permissions).
+    if (user.isManager || user.isSuperAdmin) seeAll = true;
     for (const ur of user.roles) {
       if (ur.role.seeAll) seeAll = true;
       for (const p of ur.role.permissions) if (p.allowed) allowed.add(p.logTypeKey);
     }
-    if (user.isSuperAdmin) seeAll = true;
   }
   if (seeAll) for (const k of LOG_TYPE_KEYS) allowed.add(k);
   return {

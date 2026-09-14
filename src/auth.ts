@@ -2,7 +2,7 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers";
 import { REGIONS, type RegionKey } from "@/lib/regions";
 import { prisma } from "@/lib/prisma";
-import { canSSO, isManagerLevel, resolveLevel } from "@/lib/adminLevels";
+import { canSSO, isManagerLevel, resolveLevel, ADMIN_LEVEL_NAME } from "@/lib/adminLevels";
 
 interface UcpUser {
   id: number;
@@ -66,7 +66,7 @@ export const authConfig: NextAuthConfig = {
       if (!canSSO(level)) return "/login?error=not_authorized";
 
       // Managers (Manager+) may edit their region's role permissions; never auto-grant superadmin.
-      await prisma.user.upsert({
+      const dbUser = await prisma.user.upsert({
         where: { region_ucpId: { region, ucpId: u.ucpId } },
         create: {
           region, ucpId: u.ucpId, username: u.name, discordName: u.discordName ?? null,
@@ -76,6 +76,20 @@ export const authConfig: NextAuthConfig = {
           username: u.name, discordName: u.discordName ?? null,
           adminLevel: level, isManager: isManagerLevel(level), lastLogin: new Date(),
         },
+      });
+
+      // Ensure a Role exists for this rank in this region, and the user is assigned to it, so
+      // managers have concrete roles to edit permissions on. Role key = the AdminLevel int.
+      const roleKey = String(level);
+      const role = await prisma.role.upsert({
+        where: { region_key: { region, key: roleKey } },
+        create: { region, key: roleKey, name: ADMIN_LEVEL_NAME[level] ?? `Level ${level}`, rank: level },
+        update: {},
+      });
+      await prisma.userRole.upsert({
+        where: { userId_roleId: { userId: dbUser.id, roleId: role.id } },
+        create: { userId: dbUser.id, roleId: role.id },
+        update: {},
       });
       return true;
     },
