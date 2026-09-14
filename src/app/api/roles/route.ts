@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getFlags, flagLabel } from "@/lib/logTypes";
+import { groupOptions } from "@/lib/logGroups";
 
 function canManage(u: { isManager: boolean; isSuperAdmin: boolean }) {
   return u.isManager || u.isSuperAdmin;
@@ -14,17 +14,14 @@ export async function GET() {
   const u = session.user;
   if (!canManage(u)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [roles, flags] = await Promise.all([
-    prisma.role.findMany({
-      where: u.isSuperAdmin ? {} : { region: u.region },
-      orderBy: [{ region: "asc" }, { rank: "desc" }],
-      include: { permissions: true, _count: { select: { users: true } } },
-    }),
-    getFlags(),
-  ]);
+  const roles = await prisma.role.findMany({
+    where: u.isSuperAdmin ? {} : { region: u.region },
+    orderBy: [{ region: "asc" }, { rank: "desc" }],
+    include: { permissions: true, _count: { select: { users: true } } },
+  });
 
   return NextResponse.json({
-    logTypes: flags.map((k) => ({ key: k, label: flagLabel(k) })),
+    logTypes: groupOptions().map((g) => ({ key: g.key, label: g.label, desc: g.desc, featured: g.featured })),
     roles: roles.map((r) => ({
       id: r.id,
       region: r.region,
@@ -59,7 +56,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  if (body.logTypeKey && typeof body.allowed === "boolean" && (await getFlags()).includes(body.logTypeKey)) {
+  if (body.logTypeKey && typeof body.allowed === "boolean" && groupOptions().some((g) => g.key === body.logTypeKey)) {
     await prisma.rolePermission.upsert({
       where: { roleId_logTypeKey: { roleId: role.id, logTypeKey: body.logTypeKey } },
       create: { roleId: role.id, logTypeKey: body.logTypeKey, allowed: body.allowed },

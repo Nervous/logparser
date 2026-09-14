@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { effectivePermissions } from "@/lib/rbac";
 import { getRegion } from "@/lib/regions";
-import { getFlags, flagLabel } from "@/lib/logTypes";
+import { groupOptions } from "@/lib/logGroups";
 import Explorer from "@/components/Explorer";
 
 export default async function DashboardPage() {
@@ -9,11 +9,12 @@ export default async function DashboardPage() {
   const perms = await effectivePermissions(session!.user.uid);
   const region = getRegion(session!.user.region);
 
-  const flags = await getFlags();
-  const logTypes = flags.map((k) => ({
-    key: k,
-    label: flagLabel(k),
-    allowed: perms.seeAll || perms.allowed.has(k),
+  const logTypes = groupOptions().map((g) => ({
+    key: g.key,
+    label: g.label,
+    desc: g.desc,
+    featured: g.featured,
+    allowed: perms.seeAll || perms.allowed.has(g.key),
   }));
 
   return (

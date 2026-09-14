@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { effectivePermissions } from "@/lib/rbac";
-import { getFlags, flagLabel } from "@/lib/logTypes";
+import { getFlags } from "@/lib/logTypes";
+import { groupOptions, resolveGroupsToPlan } from "@/lib/logGroups";
 import { getRegion } from "@/lib/regions";
 import { searchRecent, volume, type QuerySpec } from "@/lib/loki";
 
@@ -21,12 +22,12 @@ export async function GET(req: Request) {
   if (!allowedServers.has(server)) return NextResponse.json({ error: "Invalid server" }, { status: 403 });
 
   const perms = await effectivePermissions(session.user.uid);
-  const allFlags = await getFlags();
-  const allowedKeys = perms.seeAll ? allFlags : allFlags.filter((k) => perms.allowed.has(k));
+  const groups = groupOptions();
+  const allowedKeys = groups.filter((g) => perms.seeAll || perms.allowed.has(g.key)).map((g) => g.key);
 
-  // requested types ∩ allowed; default to all allowed
+  // requested groups ∩ allowed; default to all allowed
   const requested = (url.searchParams.get("types") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const types = (requested.length ? requested.filter((k) => allowedKeys.includes(k)) : allowedKeys);
+  const selected = (requested.length ? requested.filter((k) => allowedKeys.includes(k)) : allowedKeys);
 
   const q = url.searchParams.get("q")?.trim() ?? "";
   const range = url.searchParams.get("range") ?? "6h";
@@ -35,19 +36,14 @@ export async function GET(req: Request) {
   const fromMs = now - (RANGES[range] ?? RANGES["6h"]);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 200), 1000);
 
-  if (types.length === 0) {
-    return NextResponse.json({ entries: [], volume: [], total: 0, allowedTypes: allowedKeys, note: "no_access" });
+  if (selected.length === 0) {
+    return NextResponse.json({ entries: [], volume: [], total: 0, allowedTypes: [], note: "no_access" });
   }
 
-  const spec: QuerySpec = { region, server, logTypeKeys: types, terms: q ? [q] : [], fromMs, toMs };
+  const subqueries = resolveGroupsToPlan(selected, await getFlags());
+  const spec: QuerySpec = { region, server, subqueries, terms: q ? [q] : [], fromMs, toMs };
   const [entries, vol] = await Promise.all([searchRecent(spec, limit), volume(spec)]);
   const total = vol.reduce((a, b) => a + b.count, 0);
 
-  return NextResponse.json({
-    entries,
-    volume: vol,
-    total,
-    range,
-    allowedTypes: allowedKeys.map((k) => ({ key: k, label: flagLabel(k) })),
-  });
+  return NextResponse.json({ entries, volume: vol, total, range });
 }

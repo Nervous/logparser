@@ -1,5 +1,6 @@
 "use client";
 
+import { groupLabel } from "@/lib/logGroups";
 import { useCallback, useEffect, useState } from "react";
 import { Download, Check, X, Loader2, RefreshCw } from "lucide-react";
 
@@ -75,7 +76,7 @@ export default function RequestsTable({ scope, canApprove }: { scope: "all" | "m
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {r.logTypes.map((t) => (
-                      <span key={t} className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${r.unauthorizedTypes.includes(t) ? "bg-warn/15 text-warn" : "bg-bg-elev-2 text-text-soft"}`}>#{t}</span>
+                      <span key={t} className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${r.unauthorizedTypes.includes(t) ? "bg-warn/15 text-warn" : "bg-bg-elev-2 text-text-soft"}`}>{groupLabel(t)}</span>
                     ))}
                   </div>
                 </td>

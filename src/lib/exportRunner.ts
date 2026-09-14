@@ -2,7 +2,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import { prisma } from "./prisma";
 import { fetchAll } from "./loki";
-import { flagLabel } from "./logTypes";
+import { getFlags } from "./logTypes";
+import { groupLabel, resolveGroupsToPlan } from "./logGroups";
 
 const EXPORT_DIR = process.env.EXPORT_DIR ?? path.join(process.cwd(), "data", "exports");
 
@@ -13,12 +14,13 @@ export async function runExport(requestId: number): Promise<void> {
   if (!req) return;
   await prisma.exportRequest.update({ where: { id: requestId }, data: { status: "RUNNING" } });
   try {
-    const logTypeKeys: string[] = JSON.parse(req.logTypes);
+    const groupKeys: string[] = JSON.parse(req.logTypes);
     const terms: string[] = req.searchParams.split("|").map((s: string) => s.trim()).filter(Boolean);
+    const subqueries = resolveGroupsToPlan(groupKeys, await getFlags());
     const entries = await fetchAll({
       region: req.region,
       server: req.server,
-      logTypeKeys,
+      subqueries,
       terms,
       fromMs: req.fromDate.getTime(),
       toMs: req.toDate.getTime(),
@@ -30,7 +32,7 @@ export async function runExport(requestId: number): Promise<void> {
       `# GTA World log export #${req.id}\n` +
       `# region=${req.region} server=${req.server}\n` +
       `# terms=${terms.join(" | ")}\n` +
-      `# types=${logTypeKeys.map((k) => flagLabel(k)).join(", ")}\n` +
+      `# types=${groupKeys.map((k) => groupLabel(k)).join(", ")}\n` +
       `# range=${req.fromDate.toISOString()} .. ${req.toDate.toISOString()}\n` +
       `# lines=${entries.length}\n\n`;
     const body = entries

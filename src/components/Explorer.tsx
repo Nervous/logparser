@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Loader2, Download, Lock, FileDown, X } from "lucide-react";
-import { CATEGORIES, categorize } from "@/lib/logTypes";
+import { Search, Loader2, Download, Lock, FileDown, X, Star } from "lucide-react";
 
-interface LogTypeOpt { key: string; label: string; allowed: boolean }
+interface LogTypeOpt { key: string; label: string; desc?: string; featured?: boolean; allowed: boolean }
 interface Entry { ts: number; server: string; flag: string; line: string }
 interface Vol { t: number; count: number }
 
@@ -243,7 +242,8 @@ function RequestModal({
   );
 }
 
-// Searchable log-type multi-select — handles the ~100 real flag columns without a wall of chips.
+// Log-type picker over GROUPS: the six featured "super categories" up top as prominent tiles,
+// the broad categories below. No wall of 180 flags — staff pick and are authorized by group.
 function TypePicker({
   logTypes, selected, setSelected,
 }: {
@@ -251,72 +251,63 @@ function TypePicker({
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
 }) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState<Set<string>>(new Set());
   const authorized = logTypes.filter((t) => t.allowed);
-  const s = search.toLowerCase();
+  const featured = logTypes.filter((t) => t.featured);
+  const general = logTypes.filter((t) => !t.featured);
 
-  // group flags by category, honouring CATEGORIES order
-  const groups = CATEGORIES.map((c) => ({
-    ...c,
-    items: logTypes.filter((t) => categorize(t.key) === c.key && (!s || t.key.includes(s))),
-  })).filter((g) => g.items.length > 0);
-
-  function toggle(k: string) {
+  function toggle(k: string, allowed: boolean) {
+    if (!allowed) return;
     const n = new Set(selected);
     n.has(k) ? n.delete(k) : n.add(k);
     setSelected(n);
   }
-  function toggleCategory(items: LogTypeOpt[], on: boolean) {
-    const n = new Set(selected);
-    for (const t of items) if (t.allowed) (on ? n.add(t.key) : n.delete(t.key));
-    setSelected(n);
-  }
+
+  const Tile = (t: LogTypeOpt) => {
+    const on = selected.has(t.key);
+    return (
+      <button
+        key={t.key}
+        disabled={!t.allowed}
+        onClick={() => toggle(t.key, t.allowed)}
+        title={t.allowed ? t.desc : "Not authorized — build a request to get approval"}
+        className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+          !t.allowed
+            ? "cursor-not-allowed border-border-soft opacity-50"
+            : on
+              ? "border-accent-2 bg-accent-2/10"
+              : "border-border bg-bg-elev-2 hover:border-accent-2/50"
+        }`}
+      >
+        <span className={`mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-sm border text-[10px] ${on ? "border-accent-2 bg-accent-2 text-black" : "border-text-dim"}`}>{on ? "✓" : ""}</span>
+        <span className="min-w-0">
+          <span className="flex items-center gap-1 text-xs font-medium">
+            {t.featured && <Star size={11} className="flex-none text-accent" />}
+            <span className="truncate">{t.label}</span>
+            {!t.allowed && <Lock size={10} className="flex-none text-warn" />}
+          </span>
+          {t.desc && <span className="mt-0.5 block truncate text-[10px] text-text-dim">{t.desc}</span>}
+        </span>
+      </button>
+    );
+  };
 
   return (
-    <div className="rounded-lg border border-border bg-bg-elev-2">
-      <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
-        <Search size={13} className="text-text-dim" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter log types…" className="flex-1 bg-transparent text-xs outline-none" />
-        <span className="text-[10px] text-text-dim">{selected.size} selected</span>
-        <button onClick={() => setSelected(new Set(authorized.map((t) => t.key)))} className="rounded px-1.5 py-0.5 text-[10px] text-accent-2 hover:bg-bg-elev">all</button>
-        <button onClick={() => setSelected(new Set())} className="rounded px-1.5 py-0.5 text-[10px] text-text-dim hover:bg-bg-elev">none</button>
+    <div className="rounded-lg border border-border bg-bg-elev-2 p-2.5">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-text-dim">Featured</span>
+        <span className="flex items-center gap-2 text-[10px] text-text-dim">
+          {selected.size} selected
+          <button onClick={() => setSelected(new Set(authorized.map((t) => t.key)))} className="rounded px-1.5 py-0.5 text-accent-2 hover:bg-bg-elev">all</button>
+          <button onClick={() => setSelected(new Set())} className="rounded px-1.5 py-0.5 hover:bg-bg-elev">none</button>
+        </span>
       </div>
-      <div className="max-h-64 overflow-auto p-1.5">
-        {groups.map((g) => {
-          const sel = g.items.filter((t) => selected.has(t.key)).length;
-          const allSel = sel > 0 && sel === g.items.filter((t) => t.allowed).length;
-          const expanded = open.has(g.key) || !!s;
-          return (
-            <div key={g.key} className="mb-0.5">
-              <div className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-bg-elev">
-                <button onClick={() => { const n = new Set(open); n.has(g.key) ? n.delete(g.key) : n.add(g.key); setOpen(n); }} className="flex flex-1 items-center gap-1.5 text-left">
-                  <span className="text-text-dim">{expanded ? "▾" : "▸"}</span>
-                  <span className="text-xs font-medium">{g.label}</span>
-                  <span className="text-[10px] text-text-dim">{sel}/{g.items.length}</span>
-                </button>
-                <button onClick={() => toggleCategory(g.items, !allSel)} className={`rounded px-1.5 py-0.5 text-[10px] ${allSel ? "bg-accent-2/20 text-accent-2" : "text-text-dim hover:text-text"}`}>{allSel ? "clear" : "all"}</button>
-              </div>
-              {expanded && (
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 py-1 pl-5 sm:grid-cols-3">
-                  {g.items.map((t) => {
-                    const on = selected.has(t.key);
-                    return (
-                      <button key={t.key} disabled={!t.allowed} onClick={() => toggle(t.key)} title={t.allowed ? t.key : "Not authorized — needs approval"}
-                        className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[11px] ${!t.allowed ? "cursor-not-allowed text-text-dim opacity-50" : on ? "text-text" : "text-text-dim hover:text-text"}`}>
-                        <span className={`flex h-3.5 w-3.5 flex-none items-center justify-center rounded-sm border text-[9px] ${on ? "border-accent-2 bg-accent-2 text-black" : "border-text-dim"}`}>{on ? "✓" : ""}</span>
-                        {!t.allowed && <Lock size={9} className="flex-none text-warn" />}
-                        <span className="truncate">{t.key}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {groups.length === 0 && <span className="block py-2 text-center text-[11px] text-text-dim">no match</span>}
-      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{featured.map(Tile)}</div>
+      {general.length > 0 && (
+        <>
+          <div className="mb-2 mt-3 text-[11px] font-medium uppercase tracking-wider text-text-dim">Categories</div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{general.map(Tile)}</div>
+        </>
+      )}
     </div>
   );
 }
