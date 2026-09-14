@@ -52,6 +52,23 @@ const RANK: Record<number, number> = {
 // Trial Admin). Change SSO_MIN_LEVEL to ADMIN_LEVEL.SUPPORT / TRIALADMIN to widen access.
 export const SSO_MIN_LEVEL = ADMIN_LEVEL.ADMINONE;
 
+// Reverse of the name map (lower-cased) — the UCP /api/user returns the rank as a translated
+// NAME string (e.g. "Senior Manager"), not the enum int, so we resolve names back to levels.
+const LEVEL_BY_NAME: Record<string, number> = Object.fromEntries(
+  Object.entries(ADMIN_LEVEL_NAME).map(([lvl, name]) => [name.toLowerCase(), Number(lvl)]),
+);
+
+// Accept a number, a numeric string, or a translated AdminLevel name.
+export function resolveLevel(input: unknown): number {
+  if (typeof input === "number" && !Number.isNaN(input)) return input;
+  if (typeof input === "string") {
+    const t = input.trim();
+    if (/^\d+$/.test(t)) return Number(t);
+    return LEVEL_BY_NAME[t.toLowerCase()] ?? 0;
+  }
+  return 0;
+}
+
 export function rankOf(level: number): number {
   return RANK[level] ?? 0;
 }

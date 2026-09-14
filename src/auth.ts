@@ -2,14 +2,17 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers";
 import { REGIONS, type RegionKey } from "@/lib/regions";
 import { prisma } from "@/lib/prisma";
-import { canSSO, isManagerLevel } from "@/lib/adminLevels";
+import { canSSO, isManagerLevel, resolveLevel } from "@/lib/adminLevels";
 
 interface UcpUser {
   id: number;
   username?: string;
   name?: string;
   discord_username?: string;
-  admin?: number; // UCP AdminLevel enum value (0 = player)
+  admin?: number; // legacy users.admin column (0 for most staff — NOT the rank)
+  // real staff rank: user_has_roles.role_id, returned by /api/user as role.role_id,
+  // already translated to an AdminLevel NAME string (e.g. "Senior Manager").
+  role?: { role_id?: string | number } | null;
 }
 // GTAW UCP /api/user (DataController@details) wraps the payload: { "user": { … } }.
 type UcpProfile = { user?: UcpUser } & Partial<UcpUser>;
@@ -30,13 +33,15 @@ function ucpProvider(region: RegionKey): OAuthConfig<UcpProfile> {
     checks: ["state"],
     profile(p) {
       const u: UcpUser = (p.user ?? p) as UcpUser; // /api/user wraps as { user: {…} }
+      // rank comes from the role relation (name string); fall back to the legacy admin column
+      const level = resolveLevel(u.role?.role_id) || Number(u.admin ?? 0);
       return {
         id: `${region}:${u.id}`,
         name: u.username ?? u.name ?? `#${u.id}`,
         ucpId: u.id,
         region,
         discordName: u.discord_username ?? null,
-        adminLevel: Number(u.admin ?? 0),
+        adminLevel: level,
       } as unknown as { id: string; name: string };
     },
   };
