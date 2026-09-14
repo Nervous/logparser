@@ -4,13 +4,15 @@ import { REGIONS, type RegionKey } from "@/lib/regions";
 import { prisma } from "@/lib/prisma";
 import { canSSO, isManagerLevel } from "@/lib/adminLevels";
 
-interface UcpProfile {
+interface UcpUser {
   id: number;
   username?: string;
   name?: string;
   discord_username?: string;
   admin?: number; // UCP AdminLevel enum value (0 = player)
 }
+// GTAW UCP /api/user (DataController@details) wraps the payload: { "user": { … } }.
+type UcpProfile = { user?: UcpUser } & Partial<UcpUser>;
 
 // One OAuth provider per region, each pointed at that region's UCP (Laravel Passport).
 // The admin picks region+server on the login page, which calls signIn(`ucp-<region>`).
@@ -27,13 +29,14 @@ function ucpProvider(region: RegionKey): OAuthConfig<UcpProfile> {
     userinfo: `${U}/api/user`,
     checks: ["state"],
     profile(p) {
+      const u: UcpUser = (p.user ?? p) as UcpUser; // /api/user wraps as { user: {…} }
       return {
-        id: `${region}:${p.id}`,
-        name: p.username ?? p.name ?? `#${p.id}`,
-        ucpId: p.id,
+        id: `${region}:${u.id}`,
+        name: u.username ?? u.name ?? `#${u.id}`,
+        ucpId: u.id,
         region,
-        discordName: p.discord_username ?? null,
-        adminLevel: Number(p.admin ?? 0),
+        discordName: u.discord_username ?? null,
+        adminLevel: Number(u.admin ?? 0),
       } as unknown as { id: string; name: string };
     },
   };
