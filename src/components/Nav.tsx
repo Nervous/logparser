@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/requests/queue", label: "Request Queue" },
   { href: "/requests", label: "All Requests" },
   { href: "/users", label: "User List", managerOnly: true },
+  { href: "/searches", label: "Search Audit", managerOnly: true },
   { href: "/diagnostics", label: "Diagnostics", managerOnly: true },
 ];
 

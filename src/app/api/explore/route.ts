@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { effectivePermissions } from "@/lib/rbac";
 import { getFlags } from "@/lib/logTypes";
 import { groupOptions, resolveGroupsToPlan } from "@/lib/logGroups";
@@ -44,6 +45,17 @@ export async function GET(req: Request) {
   const spec: QuerySpec = { region, server, subqueries, terms: q ? [q] : [], fromMs, toMs };
   const [entries, vol] = await Promise.all([searchRecent(spec, limit), volume(spec)]);
   const total = vol.reduce((a, b) => a + b.count, 0);
+
+  // Audit trail: record actual searches (a search term was entered). Plain volume/browse loads
+  // (empty query) are not logged. Best-effort — never fail the response on a logging error.
+  if (q) {
+    prisma.searchLog.create({
+      data: {
+        userId: session.user.uid, username: session.user.username ?? String(session.user.uid),
+        region, server, query: q, logTypes: JSON.stringify(selected), range, resultCount: total,
+      },
+    }).catch(() => {});
+  }
 
   return NextResponse.json({ entries, volume: vol, total, range });
 }

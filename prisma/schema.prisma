@@ -107,3 +107,22 @@ model ExportRequest {
   @@index([status])
   @@index([requesterId])
 }
+
+// Audit trail of live-explorer searches: who searched what, where, and how many hits. Written on
+// every /api/explore query that carries a search term. Viewable by managers+ on /searches.
+model SearchLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  username    String
+  region      String
+  server      String
+  query       String   @db.Text                  // the search term(s)
+  logTypes    String   @db.Text                  // JSON array of group keys the search ran over
+  range       String                             // e.g. 6h, 24h, 7d
+  resultCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([region])
+  @@index([userId])
+  @@index([createdAt])
+}
