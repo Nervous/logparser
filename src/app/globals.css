@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* explore.gta.world — GTAW dark palette (navy ground, orange accent) */
+:root {
+  --bg: #0d1017;
+  --bg-elev: #151a24;
+  --bg-elev-2: #1b2231;
+  --border: #232c3d;
+  --border-soft: #1c2431;
+  --text: #e8ecf3;
+  --text-soft: #9aa6bd;
+  --text-dim: #64708a;
+  --accent: #ffac00;
+  --accent-2: #6366f1;
+  --good: #34d399;
+  --bad: #f87171;
+  --warn: #fbbf24;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-elev-2: var(--bg-elev-2);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-text: var(--text);
+  --color-text-soft: var(--text-soft);
+  --color-text-dim: var(--text-dim);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+  --color-warn: var(--warn);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+* { border-color: var(--border); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--bg-elev-2); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3446; }

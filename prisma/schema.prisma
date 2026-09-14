@@ -1,0 +1,105 @@
+// explore.gta.world — log browser & export tool
+// Permissions are PER-ROLE (roles sourced from the UCP / DB); users inherit their role's
+// allowed log types. Managers edit role permissions. Export requests that touch a log type
+// the requester's role cannot see go into an approval queue.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// A user authenticated through a region's UCP SSO.
+model User {
+  id            Int       @id @default(autoincrement())
+  ucpId         Int                                   // the UCP account id
+  region        String                                // en / fr / es / tr / kr — the UCP they signed in through
+  username      String                                // UCP username
+  discordName   String?
+  isManager     Boolean   @default(false)            // can edit role permissions for their region
+  isSuperAdmin  Boolean   @default(false)            // cross-region (staff management)
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  roles         UserRole[]
+  requests      ExportRequest[] @relation("requester")
+  approvals     ExportRequest[] @relation("approver")
+
+  @@unique([region, ucpId])
+  @@index([region])
+}
+
+// A role within a region (mirrors a UCP admin role or a DB-defined one).
+model Role {
+  id          Int      @id @default(autoincrement())
+  region      String
+  key         String                                  // stable key, e.g. "admin", "senior", "trial"
+  name        String
+  rank        Int      @default(0)                    // higher = more senior; used for ordering
+  seeAll      Boolean  @default(false)                // "Can See All Activity"
+  createdAt   DateTime @default(now())
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([region, key])
+  @@index([region])
+}
+
+model UserRole {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  roleId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+// The log categories a role may view. logTypeKey matches LogType.key in src/lib/logTypes.ts.
+model RolePermission {
+  id         Int     @id @default(autoincrement())
+  roleId     Int
+  logTypeKey String
+  allowed    Boolean @default(false)
+  role       Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, logTypeKey])
+}
+
+enum RequestStatus {
+  PENDING_APPROVAL   // needs an authorized user to approve at least one log type
+  APPROVED           // approved, ready to run / running
+  RUNNING
+  COMPLETE
+  DENIED
+  FAILED
+}
+
+// One export job: a character (or free-text search) over a timeframe, across chosen log types.
+model ExportRequest {
+  id            Int           @id @default(autoincrement())
+  region        String
+  server        String                                 // exact instance (en, en-voice, …)
+  name          String                                 // human label (report url / character / search term)
+  searchParams  String        @db.Text                 // pipe-joined character names / search terms
+  logTypes      String        @db.Text                 // JSON array of logType keys requested
+  unauthorizedTypes String    @db.Text                 // JSON array of the ones needing approval
+  fromDate      DateTime
+  toDate        DateTime
+  status        RequestStatus @default(PENDING_APPROVAL)
+  requesterId   Int
+  approverId    Int?
+  resultPath    String?                                // path to the generated export file
+  lineCount     Int?
+  error         String?       @db.Text
+  createdAt     DateTime      @default(now())
+  completedAt   DateTime?
+  requester     User          @relation("requester", fields: [requesterId], references: [id])
+  approver      User?         @relation("approver", fields: [approverId], references: [id])
+
+  @@index([region])
+  @@index([status])
+  @@index([requesterId])
+}
