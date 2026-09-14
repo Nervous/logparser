@@ -51,6 +51,7 @@ export function flagsRegexFor(keys: string[]): string {
 export interface Category { key: string; label: string }
 export const CATEGORIES: Category[] = [
   { key: "chat", label: "Chat & Communication" },
+  { key: "phone", label: "Phone" },
   { key: "admin", label: "Admin & Anti-Cheat" },
   { key: "money", label: "Economy & Money" },
   { key: "vehicles", label: "Vehicles" },
@@ -63,7 +64,9 @@ export const CATEGORIES: Category[] = [
 ];
 
 const CATEGORY_RULES: [string, RegExp][] = [
-  ["chat", /chat|phone|voice|boombox|sms|message|noticeboard|discord|mail/],
+  // phone before chat so phonecontroller/phonemessage land in Phone, not Chat
+  ["phone", /phone/],
+  ["chat", /chat|voice|boombox|sms|message|noticeboard|discord/],
   ["admin", /admin|alert|anticheat|aimmonitor|watchlist|report|rpqm|staff|\bdev\b|specialcommand|commandalias|command$|^command/],
   ["money", /money|bank|atm|casino|shop|business|paycheck|transfer|pricing|donat|points|lucky|poker|fleeca/],
   ["vehicles", /veh|chop|flatbed|garage|fuel|charger|\btow\b|els|siren|racing|golfcart|subwoofer|lightbar/],
