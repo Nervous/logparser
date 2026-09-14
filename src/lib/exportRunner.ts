@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { prisma } from "./prisma";
 import { fetchAll } from "./loki";
-import { getLogType } from "./logTypes";
+import { flagLabel } from "./logTypes";
 
 const EXPORT_DIR = process.env.EXPORT_DIR ?? path.join(process.cwd(), "data", "exports");
 
@@ -30,7 +30,7 @@ export async function runExport(requestId: number): Promise<void> {
       `# GTA World log export #${req.id}\n` +
       `# region=${req.region} server=${req.server}\n` +
       `# terms=${terms.join(" | ")}\n` +
-      `# types=${logTypeKeys.map((k) => getLogType(k)?.label ?? k).join(", ")}\n` +
+      `# types=${logTypeKeys.map((k) => flagLabel(k)).join(", ")}\n` +
       `# range=${req.fromDate.toISOString()} .. ${req.toDate.toISOString()}\n` +
       `# lines=${entries.length}\n\n`;
     const body = entries

@@ -31,13 +31,14 @@ function escapeRe(s: string): string {
 function buildSelector(spec: QuerySpec): string {
   const labels: string[] = [`region="${spec.region}"`, `job="fivem"`];
   if (spec.server) labels.push(`server="${spec.server}"`);
+  // flags ARE the selectable log types now; match any of the chosen ones exactly.
+  // Backtick raw strings avoid LogQL/Go double-quote escape errors on regex metachars.
   const flagRe = flagsRegexFor(spec.logTypeKeys);
-  if (flagRe) labels.push(`flag=~"${flagRe}"`);
+  if (flagRe) labels.push(`flag=~\`${flagRe}\``);
   let q = `{${labels.join(",")}}`;
-  const terms = spec.terms.map((t) => t.trim()).filter(Boolean);
+  const terms = spec.terms.map((t) => t.trim().replace(/`/g, "")).filter(Boolean);
   if (terms.length) {
-    // case-insensitive OR across terms, whole-word-ish
-    q += ` |~ "(?i)(${terms.map(escapeRe).join("|")})"`;
+    q += ` |~ \`(?i)(${terms.map(escapeRe).join("|")})\``;
   }
   return q;
 }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Loader2, Download, Lock, FileDown, X } from "lucide-react";
 
-interface LogTypeOpt { key: string; label: string; channel: string; allowed: boolean }
+interface LogTypeOpt { key: string; label: string; allowed: boolean }
 interface Entry { ts: number; server: string; flag: string; line: string }
 interface Vol { t: number; count: number }
 
@@ -48,12 +48,6 @@ export default function Explorer({
 
   const maxVol = useMemo(() => Math.max(1, ...(data?.volume ?? []).map((v) => v.count)), [data]);
 
-  function toggleType(k: string) {
-    const n = new Set(types);
-    n.has(k) ? n.delete(k) : n.add(k);
-    setTypes(n);
-  }
-
   return (
     <div className="space-y-5">
       <div className="flex items-end justify-between gap-4">
@@ -92,26 +86,7 @@ export default function Explorer({
             ))}
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {logTypes.map((t) => {
-            const on = types.has(t.key);
-            return (
-              <button
-                key={t.key}
-                disabled={!t.allowed}
-                onClick={() => toggleType(t.key)}
-                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[11px] transition ${
-                  !t.allowed ? "cursor-not-allowed border border-border bg-bg-elev-2 text-text-dim opacity-60"
-                    : on ? "bg-accent-2/20 text-text ring-1 ring-accent-2" : "bg-bg-elev-2 text-text-dim hover:text-text"
-                }`}
-                title={t.allowed ? t.label : "Not authorized — request approval to view"}
-              >
-                {!t.allowed && <Lock size={10} />}
-                {t.channel}
-              </button>
-            );
-          })}
-        </div>
+        <TypePicker logTypes={logTypes} selected={types} setSelected={setTypes} />
       </div>
 
       {authorized.length === 0 && (
@@ -241,17 +216,7 @@ function RequestModal({
         )}
 
         <label className="mt-4 block text-xs uppercase tracking-wider text-text-dim">Log types</label>
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {logTypes.map((t) => {
-            const on = selected.has(t.key);
-            return (
-              <button key={t.key} onClick={() => { const n = new Set(selected); n.has(t.key) ? n.delete(t.key) : n.add(t.key); setSelected(n); }}
-                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-mono text-[11px] ${on ? "bg-accent-2/20 ring-1 ring-accent-2" : "bg-bg-elev-2 text-text-dim"}`}>
-                {!t.allowed && <Lock size={10} className="text-warn" />}{t.channel}
-              </button>
-            );
-          })}
-        </div>
+        <div className="mt-1"><TypePicker logTypes={logTypes} selected={selected} setSelected={setSelected} /></div>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div><label className="block text-xs uppercase tracking-wider text-text-dim">From</label><input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-elev-2 px-2 py-2 text-sm outline-none focus:border-accent-2" /></div>
@@ -272,6 +237,59 @@ function RequestModal({
           )}
           {msg && <span className={`text-sm ${msg.k === "err" ? "text-bad" : msg.k === "queued" ? "text-warn" : "text-good"}`}>{msg.t}</span>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Searchable log-type multi-select — handles the ~100 real flag columns without a wall of chips.
+function TypePicker({
+  logTypes, selected, setSelected,
+}: {
+  logTypes: LogTypeOpt[];
+  selected: Set<string>;
+  setSelected: (s: Set<string>) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const shown = logTypes.filter((t) => !search || t.key.includes(search.toLowerCase()));
+  const authorized = logTypes.filter((t) => t.allowed);
+
+  function toggle(k: string) {
+    const n = new Set(selected);
+    n.has(k) ? n.delete(k) : n.add(k);
+    setSelected(n);
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-bg-elev-2">
+      <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
+        <Search size={13} className="text-text-dim" />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter log types…" className="flex-1 bg-transparent text-xs outline-none" />
+        <span className="text-[10px] text-text-dim">{selected.size} selected</span>
+        <button onClick={() => setSelected(new Set(authorized.map((t) => t.key)))} className="rounded px-1.5 py-0.5 text-[10px] text-accent-2 hover:bg-bg-elev">all</button>
+        <button onClick={() => setSelected(new Set())} className="rounded px-1.5 py-0.5 text-[10px] text-text-dim hover:bg-bg-elev">none</button>
+      </div>
+      <div className="grid max-h-40 grid-cols-2 gap-x-3 gap-y-0.5 overflow-auto p-2 sm:grid-cols-3">
+        {shown.map((t) => {
+          const on = selected.has(t.key);
+          return (
+            <button
+              key={t.key}
+              disabled={!t.allowed}
+              onClick={() => toggle(t.key)}
+              title={t.allowed ? t.key : "Not authorized — needs approval"}
+              className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[11px] ${
+                !t.allowed ? "cursor-not-allowed text-text-dim opacity-50"
+                  : on ? "text-text" : "text-text-dim hover:text-text"
+              }`}
+            >
+              <span className={`flex h-3.5 w-3.5 flex-none items-center justify-center rounded-sm border text-[9px] ${on ? "border-accent-2 bg-accent-2 text-black" : "border-text-dim"}`}>{on ? "✓" : ""}</span>
+              {!t.allowed && <Lock size={9} className="flex-none text-warn" />}
+              <span className="truncate">{t.key}</span>
+            </button>
+          );
+        })}
+        {shown.length === 0 && <span className="col-span-full py-2 text-center text-[11px] text-text-dim">no match</span>}
       </div>
     </div>
   );

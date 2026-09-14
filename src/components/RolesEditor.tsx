@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, X, Loader2, ShieldCheck } from "lucide-react";
 
-interface LT { key: string; label: string; channel: string }
+interface LT { key: string; label: string }
 interface Role {
   id: number; region: string; name: string; rank: number; seeAll: boolean;
   users: number; permissions: Record<string, boolean>;
@@ -48,7 +48,7 @@ export default function RolesEditor({ superAdmin }: { superAdmin: boolean }) {
             {superAdmin && <th className="px-4 py-3">Region</th>}
             <th className="px-4 py-3">Role</th>
             <th className="px-4 py-3">Members</th>
-            {logTypes.map((t) => <th key={t.key} className="px-4 py-3 text-center font-mono">{t.channel}</th>)}
+            {logTypes.map((t) => <th key={t.key} className="px-3 py-3 text-center font-mono text-[10px] whitespace-nowrap" title={t.label}>{t.key}</th>)}
             <th className="px-4 py-3 text-center">See all</th>
           </tr>
         </thead>

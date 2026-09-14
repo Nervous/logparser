@@ -1,5 +1,4 @@
 import { prisma } from "./prisma";
-import { LOG_TYPE_KEYS } from "./logTypes";
 
 export interface EffectivePermissions {
   allowed: Set<string>; // log-type keys the user may view
@@ -25,7 +24,7 @@ export async function effectivePermissions(userId: number): Promise<EffectivePer
       for (const p of ur.role.permissions) if (p.allowed) allowed.add(p.logTypeKey);
     }
   }
-  if (seeAll) for (const k of LOG_TYPE_KEYS) allowed.add(k);
+  // seeAll is a flag consumers honour directly (flags are dynamic; we don't enumerate them here).
   return {
     allowed,
     seeAll,
@@ -39,6 +38,7 @@ export function splitByAuthorization(
   requested: string[],
   perms: EffectivePermissions,
 ): { authorized: string[]; unauthorized: string[] } {
+  if (perms.seeAll) return { authorized: [...requested], unauthorized: [] };
   const authorized: string[] = [];
   const unauthorized: string[] = [];
   for (const k of requested) {

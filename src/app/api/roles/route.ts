@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { LOG_TYPES, LOG_TYPE_KEYS } from "@/lib/logTypes";
+import { getFlags, flagLabel } from "@/lib/logTypes";
 
 function canManage(u: { isManager: boolean; isSuperAdmin: boolean }) {
   return u.isManager || u.isSuperAdmin;
@@ -14,14 +14,17 @@ export async function GET() {
   const u = session.user;
   if (!canManage(u)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const roles = await prisma.role.findMany({
-    where: u.isSuperAdmin ? {} : { region: u.region },
-    orderBy: [{ region: "asc" }, { rank: "desc" }],
-    include: { permissions: true, _count: { select: { users: true } } },
-  });
+  const [roles, flags] = await Promise.all([
+    prisma.role.findMany({
+      where: u.isSuperAdmin ? {} : { region: u.region },
+      orderBy: [{ region: "asc" }, { rank: "desc" }],
+      include: { permissions: true, _count: { select: { users: true } } },
+    }),
+    getFlags(),
+  ]);
 
   return NextResponse.json({
-    logTypes: LOG_TYPES.map((t) => ({ key: t.key, label: t.label, channel: t.channel })),
+    logTypes: flags.map((k) => ({ key: k, label: flagLabel(k) })),
     roles: roles.map((r) => ({
       id: r.id,
       region: r.region,
@@ -30,7 +33,7 @@ export async function GET() {
       seeAll: r.seeAll,
       users: r._count.users,
       permissions: Object.fromEntries(
-        LOG_TYPE_KEYS.map((k) => [k, r.permissions.find((p) => p.logTypeKey === k)?.allowed ?? false]),
+        r.permissions.filter((p) => p.allowed).map((p) => [p.logTypeKey, true]),
       ),
     })),
   });
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  if (body.logTypeKey && typeof body.allowed === "boolean" && LOG_TYPE_KEYS.includes(body.logTypeKey)) {
+  if (body.logTypeKey && typeof body.allowed === "boolean" && (await getFlags()).includes(body.logTypeKey)) {
     await prisma.rolePermission.upsert({
       where: { roleId_logTypeKey: { roleId: role.id, logTypeKey: body.logTypeKey } },
       create: { roleId: role.id, logTypeKey: body.logTypeKey, allowed: body.allowed },

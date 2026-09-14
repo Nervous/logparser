@@ -1,68 +1,48 @@
-// Log types the UI exposes, each mapped to the Loki `flag` label values produced by
-// Vector's parser (the [FLAG] prefix from the gamemode's LoggingFlags, lower-cased).
-//
-// `channel` mirrors the old Discord channel names shown as chips in the UI.
-// `flags` is the set of Loki `flag` values that make up this category — used to build the
-// LogQL selector `{region=…, flag=~"a|b|c"}`. Refine as real data confirms the mapping.
+// Log types = the real Loki `flag` label values (the gamemode's log categories: log, job,
+// command, character, vehicle, furniture, organizations, admincommand, …). No Discord-channel
+// grouping — each flag IS a selectable type. Fetched live from Loki so the list is always complete.
 
-export interface LogType {
-  key: string; // stable permission key (matches RolePermission.logTypeKey)
-  label: string; // UI label
-  channel: string; // #chip label
-  flags: string[]; // Loki `flag` label values
-  description: string;
-}
+const LOKI_URL = process.env.LOKI_URL ?? "http://127.0.0.1:3100";
+const TTL_MS = 5 * 60 * 1000;
 
-export const LOG_TYPES: LogType[] = [
-  {
-    key: "logs",
-    label: "General Logs",
-    channel: "#logs",
-    flags: ["command", "log", "job", "vehicle", "properties", "money", "moneycommand", "spawnlog"],
-    description: "General activity: commands, jobs, vehicles, property, money.",
-  },
-  {
-    key: "chatlogs",
-    label: "Chat Logs",
-    channel: "#chatlogs",
-    flags: ["characterchat", "character"],
-    description: "In-character chat, /me, /do, radio, phone.",
-  },
-  {
-    key: "adminlogs",
-    label: "Admin Logs",
-    channel: "#admin_logs",
-    flags: ["admincommand", "adminpager", "alertadmin", "admin activity handler", "admin"],
-    description: "Administrator commands, pages and alerts.",
-  },
-  {
-    key: "furniturelogs",
-    label: "Furniture Logs",
-    channel: "#furniturelogs",
-    flags: ["furniture"],
-    description: "Furniture placement, purchase and removal.",
-  },
-  {
-    key: "factionchatlogs",
-    label: "Faction Chat Logs",
-    channel: "#factionchatlogs",
-    flags: ["organizations", "faction"],
-    description: "Faction / organization radio and chat.",
-  },
-];
+// Internal/noise flags never worth exposing as a browsable log category.
+const HIDDEN = new Set([
+  "none", "gtawresource", "gtawhost", "offthread", "threadhandler", "hitchmonitor",
+  "serverwidetickshandler", "scheduler", "dbsync", "txadmin", "tx", "t", "tsource",
+  "success", "info", "commandregistrysync", "gtawhttpclient", "loadscreenevents",
+  "charactertickengine", "charactersideeffectstickhandler", "jobshifttickhandler",
+  "paycheckstickhandler", "nativetrail", "worldtrail",
+]);
 
-export const LOG_TYPE_KEYS = LOG_TYPES.map((t) => t.key);
+let cache: { at: number; flags: string[] } | null = null;
 
-export function getLogType(key: string): LogType | undefined {
-  return LOG_TYPES.find((t) => t.key === key);
-}
-
-// The `flag=~"…"` regex value covering the requested log-type keys.
-export function flagsRegexFor(keys: string[]): string {
-  const flags = new Set<string>();
-  for (const k of keys) {
-    const t = getLogType(k);
-    if (t) for (const f of t.flags) flags.add(f);
+// Distinct, cleaned, sorted flag values (compound "a, b" split into a and b).
+export async function getFlags(): Promise<string[]> {
+  if (cache && Date.now() - cache.at < TTL_MS) return cache.flags;
+  try {
+    const res = await fetch(new URL("/loki/api/v1/label/flag/values", LOKI_URL), { cache: "no-store" });
+    const j = (await res.json()) as { data?: string[] };
+    const set = new Set<string>();
+    for (const raw of j.data ?? []) {
+      for (const part of raw.split(",")) {
+        const f = part.trim().toLowerCase();
+        if (f && !HIDDEN.has(f)) set.add(f);
+      }
+    }
+    const flags = [...set].sort();
+    cache = { at: Date.now(), flags };
+    return flags;
+  } catch {
+    return cache?.flags ?? [];
   }
-  return [...flags].map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+}
+
+// Pretty label for a flag (Title Case), e.g. "admincommand" -> "Admincommand".
+export function flagLabel(flag: string): string {
+  return flag.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// LogQL regex alternation for the selected flags (used inside a backtick raw string).
+export function flagsRegexFor(keys: string[]): string {
+  return [...new Set(keys)].map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
 }

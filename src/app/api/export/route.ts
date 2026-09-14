@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { effectivePermissions, splitByAuthorization } from "@/lib/rbac";
-import { LOG_TYPE_KEYS } from "@/lib/logTypes";
+import { getFlags } from "@/lib/logTypes";
 import { runExport } from "@/lib/exportRunner";
 import { getRegion } from "@/lib/regions";
 
@@ -23,8 +23,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid server for your community" }, { status: 403 });
 
   const terms: string[] = Array.isArray(body.terms) ? body.terms.map(String).filter(Boolean) : [];
+  const validFlags = new Set(await getFlags());
   const logTypes: string[] = Array.isArray(body.logTypes)
-    ? body.logTypes.map(String).filter((k: string) => LOG_TYPE_KEYS.includes(k))
+    ? body.logTypes.map(String).filter((k: string) => validFlags.has(k))
     : [];
   const from = new Date(body.from);
   const to = new Date(body.to);

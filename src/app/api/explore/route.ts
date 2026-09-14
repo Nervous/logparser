@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { effectivePermissions } from "@/lib/rbac";
-import { LOG_TYPES, LOG_TYPE_KEYS } from "@/lib/logTypes";
+import { getFlags, flagLabel } from "@/lib/logTypes";
 import { getRegion } from "@/lib/regions";
 import { searchRecent, volume, type QuerySpec } from "@/lib/loki";
 
@@ -21,7 +21,8 @@ export async function GET(req: Request) {
   if (!allowedServers.has(server)) return NextResponse.json({ error: "Invalid server" }, { status: 403 });
 
   const perms = await effectivePermissions(session.user.uid);
-  const allowedKeys = perms.seeAll ? LOG_TYPE_KEYS : LOG_TYPE_KEYS.filter((k) => perms.allowed.has(k));
+  const allFlags = await getFlags();
+  const allowedKeys = perms.seeAll ? allFlags : allFlags.filter((k) => perms.allowed.has(k));
 
   // requested types ∩ allowed; default to all allowed
   const requested = (url.searchParams.get("types") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -47,9 +48,6 @@ export async function GET(req: Request) {
     volume: vol,
     total,
     range,
-    allowedTypes: allowedKeys.map((k) => {
-      const t = LOG_TYPES.find((x) => x.key === k)!;
-      return { key: t.key, label: t.label, channel: t.channel };
-    }),
+    allowedTypes: allowedKeys.map((k) => ({ key: k, label: flagLabel(k) })),
   });
 }
