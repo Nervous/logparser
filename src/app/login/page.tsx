@@ -41,7 +41,7 @@ function LoginForm() {
           {error && (
             <p className="mt-4 rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">
               {error === "not_authorized"
-                ? "Your account must be Admin Level 1 or above to access the Log Explorer."
+                ? "Your account must be Trial Admin or above to access the Log Explorer."
                 : "Sign-in failed. Please try again."}
             </p>
           )}

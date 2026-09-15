@@ -49,7 +49,11 @@ export async function GET(req: Request) {
 
   const subqueries = resolveGroupsToPlan(selected, await getFlags());
   const spec: QuerySpec = { region, server, subqueries, terms: q ? [q] : [], fromMs, toMs };
-  const [entries, vol] = await Promise.all([searchRecent(spec, limit), volume(spec)]);
+  // Browsing raw recent lines without a search term is reserved to see-all users (managers+ or a
+  // role with "Can See All Activity" on this server). Everyone else must go through an audited
+  // search (q non-empty) or an export request — they still get the aggregate volume chart.
+  const canBrowse = perms.seeAll || Boolean(q);
+  const [entries, vol] = await Promise.all([canBrowse ? searchRecent(spec, limit) : Promise.resolve([]), volume(spec)]);
   const total = vol.reduce((a, b) => a + b.count, 0);
 
   // Audit trail: record actual searches (a search term was entered). Plain volume/browse loads
@@ -63,5 +67,5 @@ export async function GET(req: Request) {
     }).catch(() => {});
   }
 
-  return NextResponse.json({ entries, volume: vol, total, range });
+  return NextResponse.json({ entries, volume: vol, total, range, note: canBrowse ? undefined : "search_required" });
 }

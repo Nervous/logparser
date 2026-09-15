@@ -162,10 +162,18 @@ export default function Explorer({
         </div>
       </div>
 
-      {/* recent logs */}
+      {/* recent logs — browsing without a search term is see-all only; others search or request */}
+      {!perm.seeAll && !q.trim() ? (
+        <div className="rounded-xl border border-border bg-bg-elev p-4 text-sm text-text-soft">
+          <span className="flex items-center gap-2 font-semibold text-text"><Lock size={14} className="text-warn" /> Recent logs</span>
+          <p className="mt-1">
+            Enter a search term above to view matching logs (searches are audited), or build an export request for a character&apos;s history.
+          </p>
+        </div>
+      ) : (
       <div className="rounded-xl border border-border bg-bg-elev">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Recent logs {loading && <Loader2 size={13} className="ml-1 inline animate-spin text-text-dim" />}</h2>
+          <h2 className="text-sm font-semibold">{q.trim() ? "Matching logs" : "Recent logs"} {loading && <Loader2 size={13} className="ml-1 inline animate-spin text-text-dim" />}</h2>
           <span className="text-xs text-text-dim">{data?.entries.length ?? 0} shown · click a line to search it</span>
         </div>
         <div className="max-h-[520px] overflow-auto">
@@ -189,6 +197,7 @@ export default function Explorer({
           </table>
         </div>
       </div>
+      )}
 
       {builderOpen && (
         <RequestModal

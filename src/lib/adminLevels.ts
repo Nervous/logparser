@@ -35,8 +35,8 @@ export const ADMIN_LEVEL_NAME: Record<number, string> = {
 const RANK: Record<number, number> = {
   [ADMIN_LEVEL.PLAYER]: 0,
   [ADMIN_LEVEL.SUPPORT]: 10,
-  [ADMIN_LEVEL.TRIALADMIN]: 20,
-  [ADMIN_LEVEL.ADMINONE]: 30, // Admin Level 1 — the SSO floor
+  [ADMIN_LEVEL.TRIALADMIN]: 20, // the SSO floor
+  [ADMIN_LEVEL.ADMINONE]: 30,
   [ADMIN_LEVEL.ADMINTWO]: 40,
   [ADMIN_LEVEL.SENIORADMIN]: 50,
   [ADMIN_LEVEL.LEADADMIN]: 60,
@@ -48,9 +48,9 @@ const RANK: Record<number, number> = {
   [ADMIN_LEVEL.LEADDEVELOPER]: 65,
 };
 
-// The minimum rank allowed to sign in: "Admin Level 1 minimum" (excludes Player, Support,
-// Trial Admin). Change SSO_MIN_LEVEL to ADMIN_LEVEL.SUPPORT / TRIALADMIN to widen access.
-export const SSO_MIN_LEVEL = ADMIN_LEVEL.ADMINONE;
+// The minimum rank allowed to sign in: Trial Admin and above (excludes Player and Support).
+// Trial Admin is a staff role like any other — its log access is governed by RBAC, not the gate.
+export const SSO_MIN_LEVEL = ADMIN_LEVEL.TRIALADMIN;
 
 // Reverse of the name map (lower-cased) — the UCP /api/user returns the rank as a translated
 // NAME string (e.g. "Senior Manager"), not the enum int, so we resolve names back to levels.

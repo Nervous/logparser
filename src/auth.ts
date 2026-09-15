@@ -60,7 +60,7 @@ export const authConfig: NextAuthConfig = {
       };
       if (!region || !u.ucpId) return false;
 
-      // GATE: Admin Level 1 minimum (rank-based). Regular players, Support and Trial Admin are
+      // GATE: Trial Admin minimum (rank-based). Regular players and Support are
       // rejected at the door — before any log data is reachable. Fail-closed on missing level.
       const level = Number(u.adminLevel ?? 0);
       if (!canSSO(level)) return "/login?error=not_authorized";
