@@ -305,7 +305,7 @@ function RequestModal({
         )}
 
         <label className="mt-4 block text-xs uppercase tracking-wider text-text-dim">Log types</label>
-        <div className="mt-1"><TypePicker logTypes={logTypes} selected={selected} setSelected={setSelected} /></div>
+        <div className="mt-1"><TypePicker logTypes={logTypes} selected={selected} setSelected={setSelected} requestable /></div>
 
         <label className="mt-4 block text-xs uppercase tracking-wider text-text-dim">Timeframe</label>
         <div className="mt-1 flex flex-wrap gap-1.5">
@@ -340,19 +340,21 @@ function RequestModal({
 
 // Log-type picker over GROUPS: the six featured "super categories" up top as prominent tiles,
 // the broad categories below. No wall of 180 flags — staff pick and are authorized by group.
+// requestable: locked groups can still be picked (the export builder turns them into an approval request).
 function TypePicker({
-  logTypes, selected, setSelected,
+  logTypes, selected, setSelected, requestable = false,
 }: {
   logTypes: LogTypeOpt[];
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
+  requestable?: boolean;
 }) {
   const authorized = logTypes.filter((t) => t.allowed);
   const featured = logTypes.filter((t) => t.featured);
   const general = logTypes.filter((t) => !t.featured);
 
   function toggle(k: string, allowed: boolean) {
-    if (!allowed) return;
+    if (!allowed && !requestable) return;
     const n = new Set(selected);
     n.has(k) ? n.delete(k) : n.add(k);
     setSelected(n);
@@ -360,17 +362,18 @@ function TypePicker({
 
   const Tile = (t: LogTypeOpt) => {
     const on = selected.has(t.key);
+    const blocked = !t.allowed && !requestable;
     return (
       <button
         key={t.key}
-        disabled={!t.allowed}
+        disabled={blocked}
         onClick={() => toggle(t.key, t.allowed)}
-        title={t.allowed ? t.desc : "Not authorized — build a request to get approval"}
+        title={t.allowed ? t.desc : requestable ? "Needs approval — selecting it sends this export to the request queue" : "Not authorized — build a request to get approval"}
         className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
-          !t.allowed
+          blocked
             ? "cursor-not-allowed border-border-soft opacity-50"
             : on
-              ? "border-accent-2 bg-accent-2/10"
+              ? t.allowed ? "border-accent-2 bg-accent-2/10" : "border-warn bg-warn/10"
               : "border-border bg-bg-elev-2 hover:border-accent-2/50"
         }`}
       >
