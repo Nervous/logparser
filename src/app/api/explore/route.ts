@@ -6,6 +6,8 @@ import { getFlags } from "@/lib/logTypes";
 import { groupOptions, resolveGroupsToPlan } from "@/lib/logGroups";
 import { getRegion } from "@/lib/regions";
 import { searchRecent, volume, type QuerySpec } from "@/lib/loki";
+import { SERVER_TIME_ZONE } from "@/lib/serverTime";
+import { parseTimeInput } from "@/lib/time";
 
 const RANGES: Record<string, number> = {
   "15m": 15 * 60e3, "1h": 60 * 60e3, "6h": 6 * 60 * 60e3,
@@ -22,21 +24,23 @@ export async function GET(req: Request) {
   const server = url.searchParams.get("server") ?? region;
   if (!allowedServers.has(server)) return NextResponse.json({ error: "Invalid server" }, { status: 403 });
 
+  // Live search and recent-log browsing are See-All only (managers+, or a role with "See all" on
+  // this server). Everyone else pulls logs through export requests, which carry a reason.
   const perms = await effectivePermissions(session.user.uid, server);
-  const groups = groupOptions();
-  const allowedKeys = groups.filter((g) => perms.seeAll || perms.allowed.has(g.key)).map((g) => g.key);
+  if (!perms.seeAll)
+    return NextResponse.json({ error: "Live log search is limited to See All roles" }, { status: 403 });
 
-  // requested groups ∩ allowed; default to all allowed
-  const requested = (url.searchParams.get("types") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const selected = (requested.length ? requested.filter((k) => allowedKeys.includes(k)) : allowedKeys);
+  // Only the categories explicitly ticked — never default to all of them, so a phrase can't be
+  // searched across every log type by accident.
+  const valid = new Set(groupOptions().map((g) => g.key));
+  const selected = (url.searchParams.get("types") ?? "").split(",").map((s) => s.trim()).filter((k) => valid.has(k));
 
   const q = url.searchParams.get("q")?.trim() ?? "";
   const now = Date.now();
-  // Custom window (from/to, ISO or epoch-ms) overrides the preset range when both are valid.
-  const fromParam = url.searchParams.get("from");
-  const toParam = url.searchParams.get("to");
-  const cf = fromParam ? Date.parse(fromParam) : NaN;
-  const ct = toParam ? Date.parse(toParam) : NaN;
+  // Custom window overrides the preset range when both ends are valid: server-time wall clocks from
+  // the pickers ("YYYY-MM-DDTHH:mm", read in SERVER_TIME_ZONE) or ISO with an explicit offset.
+  const cf = parseTimeInput(url.searchParams.get("from"), SERVER_TIME_ZONE);
+  const ct = parseTimeInput(url.searchParams.get("to"), SERVER_TIME_ZONE);
   const custom = !isNaN(cf) && !isNaN(ct) && cf < ct;
   const range = custom ? "custom" : (url.searchParams.get("range") ?? "6h");
   const toMs = custom ? ct : now;
@@ -44,16 +48,12 @@ export async function GET(req: Request) {
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 200), 1000);
 
   if (selected.length === 0) {
-    return NextResponse.json({ entries: [], volume: [], total: 0, allowedTypes: [], note: "no_access" });
+    return NextResponse.json({ entries: [], volume: [], total: 0, note: "no_types" });
   }
 
   const subqueries = resolveGroupsToPlan(selected, await getFlags());
   const spec: QuerySpec = { region, server, subqueries, terms: q ? [q] : [], fromMs, toMs };
-  // Browsing raw recent lines without a search term is reserved to see-all users (managers+ or a
-  // role with "Can See All Activity" on this server). Everyone else must go through an audited
-  // search (q non-empty) or an export request — they still get the aggregate volume chart.
-  const canBrowse = perms.seeAll || Boolean(q);
-  const [entries, vol] = await Promise.all([canBrowse ? searchRecent(spec, limit) : Promise.resolve([]), volume(spec)]);
+  const [entries, vol] = await Promise.all([searchRecent(spec, limit), volume(spec)]);
   const total = vol.reduce((a, b) => a + b.count, 0);
 
   // Audit trail: record actual searches (a search term was entered). Plain volume/browse loads
@@ -67,5 +67,5 @@ export async function GET(req: Request) {
     }).catch(() => {});
   }
 
-  return NextResponse.json({ entries, volume: vol, total, range, note: canBrowse ? undefined : "search_required" });
+  return NextResponse.json({ entries, volume: vol, total, range });
 }

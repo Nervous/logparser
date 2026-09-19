@@ -3,6 +3,8 @@
 // managers+ gate in the API route). Read-only — no LogQL comes from the client here.
 
 import { statfs } from "node:fs/promises";
+import { SERVER_TIME_ZONE } from "./serverTime";
+import { startOfDay, startOfMonth } from "./time";
 
 const LOKI_URL = process.env.LOKI_URL ?? "http://127.0.0.1:3100";
 // Filesystem that holds the Loki chunks. Same mount as everything on 51.91 by default.
@@ -66,15 +68,16 @@ async function countRange(query: string, startMs: number, endMs: number, stepSec
   return lokiMatrix(url);
 }
 
-// Snap a ms timestamp to the start of its UTC day.
+// Snap a ms timestamp to the start of its SERVER-time day / month.
 function dayStart(ms: number): number {
-  const d = new Date(ms);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return startOfDay(ms, SERVER_TIME_ZONE);
 }
 function monthStart(ms: number): number {
-  const d = new Date(ms);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+  return startOfMonth(ms, SERVER_TIME_ZONE);
 }
+// Loki's day-stepped samples sit on server midnights, but a DST change shifts later ones by an
+// hour (to 23:00 or 01:00). Snapping from mid-sample keeps each on its intended day.
+const DAY_MID = 12 * 3600_000;
 
 // Align two matrices (bytes, lines) into buckets keyed by a snap function.
 function bucketize(
@@ -123,7 +126,7 @@ export async function getDiagnostics(region?: string): Promise<Diagnostics> {
   const now = Date.now();
   const days = 30;
   const months = 12;
-  const dayStartMs = dayStart(now) - (days - 1) * 86400_000;
+  const dayStartMs = dayStart(now - (days - 1) * 86400_000);
   const monthStartMs = monthStart(now - (months - 1) * 30 * 86400_000);
 
   const [dayBytes, dayLines, monBytes, monLines, storageInfo] = await Promise.all([
@@ -134,8 +137,8 @@ export async function getDiagnostics(region?: string): Promise<Diagnostics> {
     storage(),
   ]);
 
-  const daily = bucketize(dayBytes, dayLines, dayStart);
-  const monthly = bucketize(monBytes, monLines, monthStart);
+  const daily = bucketize(dayBytes, dayLines, (t) => dayStart(t + DAY_MID));
+  const monthly = bucketize(monBytes, monLines, (t) => monthStart(t + DAY_MID));
   const totals = daily.reduce(
     (a, d) => ({ bytes: a.bytes + d.bytes, lines: a.lines + d.lines, days: a.days + 1 }),
     { bytes: 0, lines: 0, days: 0 },

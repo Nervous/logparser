@@ -30,6 +30,7 @@ export async function GET() {
         rank: ADMIN_LEVEL_NAME[usr.adminLevel] ?? `Level ${usr.adminLevel}`,
         roles: roleNames,
         isManager: usr.isManager,
+        staffManagement: usr.isStaffManagement,
         seeAll,
         lastLogin: usr.lastLogin,
       };

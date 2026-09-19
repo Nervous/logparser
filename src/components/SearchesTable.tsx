@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Loader2, Search as SearchIcon } from "lucide-react";
 import { groupLabel } from "@/lib/logGroups";
+import { fmtDateTime } from "@/lib/time";
+import { useServerTimeZone } from "./ServerTime";
 
 interface Row {
   id: number; username: string; region: string; server: string;
@@ -10,6 +12,7 @@ interface Row {
 }
 
 export default function SearchesTable({ superAdmin }: { superAdmin: boolean }) {
+  const tz = useServerTimeZone();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -36,7 +39,7 @@ export default function SearchesTable({ superAdmin }: { superAdmin: boolean }) {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border text-xs uppercase tracking-wider text-text-dim">
             <tr>
-              <th className="px-4 py-3">When</th>
+              <th className="px-4 py-3">When <span className="normal-case tracking-normal">({tz})</span></th>
               <th className="px-4 py-3">Admin</th>
               {superAdmin && <th className="px-4 py-3">Region</th>}
               <th className="px-4 py-3">Server</th>
@@ -49,7 +52,7 @@ export default function SearchesTable({ superAdmin }: { superAdmin: boolean }) {
           <tbody>
             {shown.map((r) => (
               <tr key={r.id} className="border-b border-border-soft hover:bg-bg-elev-2/40">
-                <td className="whitespace-nowrap px-4 py-2.5 text-text-dim">{new Date(r.createdAt).toLocaleString()}</td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-text-dim">{fmtDateTime(r.createdAt, tz)}</td>
                 <td className="px-4 py-2.5 font-medium">{r.username}</td>
                 {superAdmin && <td className="px-4 py-2.5 uppercase text-text-dim">{r.region}</td>}
                 <td className="px-4 py-2.5 text-text-soft">{r.server}</td>

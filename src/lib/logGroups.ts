@@ -56,6 +56,11 @@ export const GROUPS: LogGroup[] = [
     featured: false, flags: /.*/ },
 ];
 
+// Export policy: any group can be exported with a stated reason, EXCEPT these, which need a
+// Senior Admin+ approval — unless the requester holds the UCP STAFFMANAGEMENT flag or See All on
+// that server (see approvalNeededFor in rbac.ts).
+export const APPROVAL_GROUPS: readonly string[] = ["chatlogs", "adminlogs"];
+
 const BY_KEY = new Map(GROUPS.map((g) => [g.key, g]));
 
 export function groupLabel(key: string): string {

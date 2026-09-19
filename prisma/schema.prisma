@@ -1,7 +1,8 @@
 // explore.gta.world — log browser & export tool
 // Permissions are PER-ROLE (roles sourced from the UCP / DB); users inherit their role's
-// allowed log types. Managers edit role permissions. Export requests that touch a log type
-// the requester's role cannot see go into an approval queue.
+// allowed log types. Managers edit role permissions. Live search is See-All only. Every export
+// needs a stated reason; exports touching Chatlogs / Admin Logs go into an approval queue
+// (Senior Admin+) unless the requester is Staff Management or has See All on that server.
 
 generator client {
   provider = "prisma-client-js"
@@ -22,6 +23,7 @@ model User {
   adminLevel    Int       @default(0)                 // UCP AdminLevel at last login (0 = player)
   isManager     Boolean   @default(false)            // can edit role permissions for their region
   isSuperAdmin  Boolean   @default(false)            // cross-region (staff management)
+  isStaffManagement Boolean @default(false)          // UCP STAFFMANAGEMENT account flag at last login — exports Chatlogs/Admin Logs without approval
   lastLogin     DateTime?
   createdAt     DateTime  @default(now())
   roles         UserRole[]
@@ -90,6 +92,8 @@ model ExportRequest {
   searchParams  String        @db.Text                 // pipe-joined character names / search terms
   logTypes      String        @db.Text                 // JSON array of logType keys requested
   unauthorizedTypes String    @db.Text                 // JSON array of the ones needing approval
+  reason        String?       @db.Text                 // why the requester needs these logs (mandatory for new requests)
+  denyReason    String?       @db.Text                 // approver's note when DENIED — shown to the requester
   fromDate      DateTime
   toDate        DateTime
   status        RequestStatus @default(PENDING_APPROVAL)

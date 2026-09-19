@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { effectivePermissions } from "@/lib/rbac";
+import { effectivePermissions, approvalNeededFor } from "@/lib/rbac";
 import { groupOptions } from "@/lib/logGroups";
 import { getRegion } from "@/lib/regions";
 
-// The current user's allowed groups + seeAll FOR A GIVEN SERVER (permissions are per-server).
-// The explorer and export builder call this whenever the selected server changes.
+// The current user's standing FOR A GIVEN SERVER (permissions are per-server): seeAll, and which
+// groups an export would send to the request queue. The export builder calls this whenever its
+// selected server changes.
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -17,6 +18,6 @@ export async function GET(req: Request) {
   if (!allowedServers.has(server)) return NextResponse.json({ error: "Invalid server" }, { status: 403 });
 
   const perms = await effectivePermissions(session.user.uid, server);
-  const allowed = groupOptions().filter((g) => perms.seeAll || perms.allowed.has(g.key)).map((g) => g.key);
-  return NextResponse.json({ server, allowed, seeAll: perms.seeAll });
+  const approvalRequired = approvalNeededFor(groupOptions().map((g) => g.key), perms);
+  return NextResponse.json({ server, seeAll: perms.seeAll, approvalRequired });
 }

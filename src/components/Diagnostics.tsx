@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, HardDrive, Database, FileText, CalendarDays } from "lucide-react";
+import { fmtDate, fmtMonth } from "@/lib/time";
+import { useServerTimeZone } from "./ServerTime";
 
 interface Bucket { t: number; bytes: number; lines: number }
 interface Storage {
@@ -27,6 +29,7 @@ function fmtNum(n: number): string {
 }
 
 export default function Diagnostics({ superAdmin }: { superAdmin: boolean }) {
+  const tz = useServerTimeZone();
   const [d, setD] = useState<Diag | null>(null);
   const [loading, setLoading] = useState(true);
   const [metric, setMetric] = useState<"bytes" | "lines">("bytes");
@@ -96,7 +99,7 @@ export default function Diagnostics({ superAdmin }: { superAdmin: boolean }) {
       {/* daily volume chart */}
       <div className="rounded-xl border border-border bg-bg-elev p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Daily volume — last 30 days</h2>
+          <h2 className="text-sm font-semibold">Daily volume — last 30 days <span className="font-normal text-text-dim">(server days, {tz})</span></h2>
           <div className="flex gap-1 rounded-md border border-border p-0.5">
             {(["bytes", "lines"] as const).map((m) => (
               <button key={m} onClick={() => setMetric(m)}
@@ -112,7 +115,7 @@ export default function Diagnostics({ superAdmin }: { superAdmin: boolean }) {
             return (
               <div key={i} className="flex-1 rounded-t bg-accent-2/70 transition-all hover:bg-accent-2"
                 style={{ height: `${Math.max(2, (val / maxDaily) * 100)}%` }}
-                title={`${new Date(b.t).toLocaleDateString()} — ${fmtBytes(b.bytes)} · ${fmtNum(b.lines)} lines`} />
+                title={`${fmtDate(b.t, tz)} — ${fmtBytes(b.bytes)} · ${fmtNum(b.lines)} lines`} />
             );
           })}
           {d.daily.length === 0 && <div className="w-full text-center text-xs text-text-dim">no data</div>}
@@ -132,7 +135,7 @@ export default function Diagnostics({ superAdmin }: { superAdmin: boolean }) {
           <tbody>
             {[...d.monthly].reverse().map((b) => (
               <tr key={b.t} className="border-b border-border-soft hover:bg-bg-elev-2/40">
-                <td className="px-4 py-3">{new Date(b.t).toLocaleDateString(undefined, { year: "numeric", month: "long" })}</td>
+                <td className="px-4 py-3">{fmtMonth(b.t, tz)}</td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums">{fmtNum(b.lines)}</td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums">{fmtBytes(b.bytes)}</td>
               </tr>

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { effectivePermissions, splitByAuthorization } from "@/lib/rbac";
+import { effectivePermissions, approvalNeededFor } from "@/lib/rbac";
 import { groupOptions } from "@/lib/logGroups";
 import { runExport } from "@/lib/exportRunner";
 import { getRegion } from "@/lib/regions";
+import { REASON_MAX } from "@/lib/requests";
+import { SERVER_TIME_ZONE } from "@/lib/serverTime";
+import { parseTimeInput } from "@/lib/time";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -27,16 +30,24 @@ export async function POST(req: Request) {
   const logTypes: string[] = Array.isArray(body.logTypes)
     ? body.logTypes.map(String).filter((k: string) => validGroups.has(k))
     : [];
-  const from = new Date(body.from);
-  const to = new Date(body.to);
+  // from/to are server-time wall clocks from the pickers (or ISO with an explicit offset)
+  const from = new Date(parseTimeInput(body.from, SERVER_TIME_ZONE));
+  const to = new Date(parseTimeInput(body.to, SERVER_TIME_ZONE));
+  const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
+  // Every export must state why it's needed — it's the audit trail approvers and managers read.
+  if (!reason) return NextResponse.json({ error: "A request reason is required" }, { status: 400 });
+  if (reason.length > REASON_MAX)
+    return NextResponse.json({ error: `Reason is too long (max ${REASON_MAX} characters)` }, { status: 400 });
   if (!terms.length) return NextResponse.json({ error: "No search terms" }, { status: 400 });
   if (!logTypes.length) return NextResponse.json({ error: "No log types" }, { status: 400 });
   if (isNaN(+from) || isNaN(+to) || from >= to)
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
 
+  // With a reason, any group exports straight away except Chatlogs / Admin Logs, which queue for
+  // a Senior Admin+ unless the requester is Staff Management or See All on this server.
   const perms = await effectivePermissions(session.user.uid, server);
-  const { unauthorized } = splitByAuthorization(logTypes, perms);
+  const unauthorized = approvalNeededFor(logTypes, perms);
 
   const request = await prisma.exportRequest.create({
     data: {
@@ -46,6 +57,7 @@ export async function POST(req: Request) {
       searchParams: terms.join(" | "),
       logTypes: JSON.stringify(logTypes),
       unauthorizedTypes: JSON.stringify(unauthorized),
+      reason,
       fromDate: from,
       toDate: to,
       status: unauthorized.length ? "PENDING_APPROVAL" : "APPROVED",

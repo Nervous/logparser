@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
+import { fmtDateTime } from "@/lib/time";
+import { useServerTimeZone } from "./ServerTime";
 
 interface U {
   id: number; region: string; username: string; discordName: string | null;
-  adminLevel: number; rank: string; roles: string[]; isManager: boolean; seeAll: boolean; lastLogin: string | null;
+  adminLevel: number; rank: string; roles: string[]; isManager: boolean; staffManagement: boolean;
+  seeAll: boolean; lastLogin: string | null;
 }
 
 export default function UsersList({ superAdmin }: { superAdmin: boolean }) {
+  const tz = useServerTimeZone();
   const [users, setUsers] = useState<U[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -37,7 +41,7 @@ export default function UsersList({ superAdmin }: { superAdmin: boolean }) {
               <th className="px-4 py-3">Nickname</th>
               <th className="px-4 py-3">Discord</th>
               <th className="px-4 py-3">Rank</th>
-              <th className="px-4 py-3">Last login</th>
+              <th className="px-4 py-3">Last login <span className="normal-case tracking-normal">({tz})</span></th>
               <th className="px-4 py-3 text-center">Access</th>
             </tr>
           </thead>
@@ -48,8 +52,13 @@ export default function UsersList({ superAdmin }: { superAdmin: boolean }) {
                 {superAdmin && <td className="px-4 py-3 uppercase text-text-dim">{u.region}</td>}
                 <td className="px-4 py-3 font-medium">{u.username}</td>
                 <td className="px-4 py-3 font-mono text-xs text-text-soft">{u.discordName ?? "—"}</td>
-                <td className="px-4 py-3 text-text-soft">{u.rank}</td>
-                <td className="px-4 py-3 text-text-dim">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "—"}</td>
+                <td className="px-4 py-3 text-text-soft">
+                  {u.rank}
+                  {u.staffManagement && (
+                    <span className="ml-2 rounded bg-accent-2/15 px-1.5 py-0.5 text-[10px] text-accent-2" title="UCP STAFFMANAGEMENT flag — exports Chatlogs / Admin Logs without approval">Staff Mgmt</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-text-dim">{u.lastLogin ? fmtDateTime(u.lastLogin, tz) : "—"}</td>
                 <td className="px-4 py-3 text-center">
                   {u.seeAll
                     ? <span className="inline-flex items-center gap-1 rounded bg-accent/15 px-2 py-0.5 text-xs text-accent"><ShieldCheck size={12} /> All</span>

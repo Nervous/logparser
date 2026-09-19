@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { APPROVAL_GROUPS } from "./logGroups";
 
 // Reserved logTypeKey meaning "Can See All Activity" for that (role, server).
 export const SEE_ALL_KEY = "__all__";
@@ -8,6 +9,7 @@ export interface EffectivePermissions {
   seeAll: boolean; // bypasses per-group checks (manager/super, or role see-all on this server)
   isManager: boolean;
   isSuperAdmin: boolean;
+  isStaffManagement: boolean; // UCP STAFFMANAGEMENT account flag (synced at sign-in)
 }
 
 // A user's effective permissions ON ONE SERVER = the UNION of their roles' allowed groups for that
@@ -37,19 +39,14 @@ export async function effectivePermissions(userId: number, server: string): Prom
     seeAll,
     isManager: user?.isManager ?? false,
     isSuperAdmin: user?.isSuperAdmin ?? false,
+    isStaffManagement: user?.isStaffManagement ?? false,
   };
 }
 
-// Split requested groups into the ones the user may run now vs the ones that need approval.
-export function splitByAuthorization(
-  requested: string[],
-  perms: EffectivePermissions,
-): { authorized: string[]; unauthorized: string[] } {
-  if (perms.seeAll) return { authorized: [...requested], unauthorized: [] };
-  const authorized: string[] = [];
-  const unauthorized: string[] = [];
-  for (const k of requested) {
-    (perms.allowed.has(k) ? authorized : unauthorized).push(k);
-  }
-  return { authorized, unauthorized };
+// The requested groups an export must send to the request queue. Anything may be exported with a
+// reason; only the approval groups (Chatlogs, Admin Logs) need sign-off — and not for Staff
+// Management (any rank) or See-All users, who can already read those logs directly.
+export function approvalNeededFor(requested: string[], perms: EffectivePermissions): string[] {
+  if (perms.seeAll || perms.isStaffManagement) return [];
+  return requested.filter((k) => APPROVAL_GROUPS.includes(k));
 }

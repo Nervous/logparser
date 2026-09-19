@@ -7,8 +7,10 @@ declare module "next-auth" {
       uid: number;
       region: string;
       username: string;
+      adminLevel: number;
       isManager: boolean;
       isSuperAdmin: boolean;
+      isStaffManagement: boolean;
     } & DefaultSession["user"];
   }
 }
@@ -18,7 +20,9 @@ declare module "next-auth/jwt" {
     uid?: number;
     region?: string;
     username?: string;
+    adminLevel?: number;
     isManager?: boolean;
     isSuperAdmin?: boolean;
+    isStaffManagement?: boolean;
   }
 }

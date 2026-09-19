@@ -83,3 +83,14 @@ export function canSSO(level: number | null | undefined): boolean {
 export function isManagerLevel(level: number): boolean {
   return rankOf(level) >= rankOf(ADMIN_LEVEL.MANAGER);
 }
+
+// Request-queue approvers — Senior Admin and above by RANK (which places Senior / Lead Developer
+// above Senior Admin), plus managers and super-admins. Client-safe: the nav uses it to show the queue.
+export function canApproveRequests(u: {
+  adminLevel?: number | null;
+  isManager?: boolean;
+  isSuperAdmin?: boolean;
+}): boolean {
+  if (u.isManager || u.isSuperAdmin) return true;
+  return rankOf(Number(u.adminLevel ?? 0)) >= rankOf(ADMIN_LEVEL.SENIORADMIN);
+}
