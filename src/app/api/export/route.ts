@@ -9,6 +9,8 @@ import { REASON_MAX } from "@/lib/requests";
 import { SERVER_TIME_ZONE } from "@/lib/serverTime";
 import { parseRangeEnd, parseTimeInput } from "@/lib/time";
 
+const truncateLabel = (s: string, max: number) => (s.length <= max ? s : `${s.slice(0, max - 1)}…`);
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -55,7 +57,8 @@ export async function POST(req: Request) {
     data: {
       region: session.user.region,
       server,
-      name: terms.join(" | "),
+      // varchar(191) label; the full term list is kept in searchParams
+      name: truncateLabel(terms.join(" | "), 191),
       searchParams: terms.join(" | "),
       logTypes: JSON.stringify(logTypes),
       unauthorizedTypes: JSON.stringify(unauthorized),

@@ -208,7 +208,7 @@ export default function Explorer({
         </>
       ) : (
         <div className="rounded-xl border border-border bg-bg-elev p-5 text-sm text-text-soft">
-          <span className="flex items-center gap-2 font-semibold text-text"><Lock size={14} className="text-warn" /> Live log search is limited to See All roles</span>
+          <span className="flex items-center gap-2 font-semibold text-text"><Lock size={14} className="text-warn" /> Live log search is limited to Managers and roles with See All</span>
           <p className="mt-1">
             Use <span className="font-medium text-text">Build export request</span> to pull a character&apos;s logs for a timeframe.
             Every request needs a reason. Chatlogs also need approval unless you&apos;re a Senior Admin or above,
