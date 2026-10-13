@@ -7,7 +7,7 @@ import { runExport } from "@/lib/exportRunner";
 import { getRegion } from "@/lib/regions";
 import { REASON_MAX } from "@/lib/requests";
 import { SERVER_TIME_ZONE } from "@/lib/serverTime";
-import { parseTimeInput } from "@/lib/time";
+import { parseRangeEnd, parseTimeInput } from "@/lib/time";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -30,9 +30,10 @@ export async function POST(req: Request) {
   const logTypes: string[] = Array.isArray(body.logTypes)
     ? body.logTypes.map(String).filter((k: string) => validGroups.has(k))
     : [];
-  // from/to are server-time wall clocks from the pickers (or ISO with an explicit offset)
+  // from/to are server-time wall clocks from the pickers (or ISO with an explicit offset); the
+  // "to" minute is inclusive, so a To of 23:59 exports the day's last minute too
   const from = new Date(parseTimeInput(body.from, SERVER_TIME_ZONE));
-  const to = new Date(parseTimeInput(body.to, SERVER_TIME_ZONE));
+  const to = new Date(parseRangeEnd(body.to, SERVER_TIME_ZONE));
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
   // Every export must state why it's needed — it's the audit trail approvers and managers read.
@@ -44,8 +45,9 @@ export async function POST(req: Request) {
   if (isNaN(+from) || isNaN(+to) || from >= to)
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
 
-  // With a reason, any group exports straight away except Chatlogs / Admin Logs, which queue for
-  // a Senior Admin+ unless the requester is Staff Management or See All on this server.
+  // With a reason, any group exports straight away except Chatlogs (below Senior Admin) and Admin
+  // Logs (below Lead Admin), which queue for an approver unless the requester is Staff Management
+  // or See All on this server.
   const perms = await effectivePermissions(session.user.uid, server);
   const unauthorized = approvalNeededFor(logTypes, perms);
 

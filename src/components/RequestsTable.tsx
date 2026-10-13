@@ -1,11 +1,11 @@
 "use client";
 
-import { groupLabel } from "@/lib/logGroups";
+import { groupLabel, groupOptions } from "@/lib/logGroups";
 import { REASON_MAX, notifyRequestsChanged } from "@/lib/requests";
 import { fmtDate, fmtDateTime } from "@/lib/time";
 import { useServerTimeZone } from "./ServerTime";
 import { useCallback, useEffect, useState } from "react";
-import { Download, Eye, Check, X, Loader2, RefreshCw } from "lucide-react";
+import { Download, Eye, Check, X, Loader2, RefreshCw, List } from "lucide-react";
 
 interface Req {
   id: number; region: string; server: string; name: string; searchParams: string;
@@ -19,10 +19,19 @@ const STATUS_STYLE: Record<string, string> = {
   PENDING_APPROVAL: "text-warn", DENIED: "text-bad", FAILED: "text-bad",
 };
 
+const GROUP_DESC = new Map(groupOptions().map((g) => [g.key, g.desc]));
+
+// Roughly what fits in the Reason cell's two lines — longer ones get a "Read more" hint.
+const REASON_PREVIEW = 60;
+
 // Server-time dates of a request's window: one date if it starts and ends the same day.
 function fmtRange(a: string, b: string, tz: string) {
   const [da, db] = [fmtDate(a, tz), fmtDate(b, tz)];
   return da === db ? da : `${da} – ${db}`;
+}
+
+function statusLabel(status: string) {
+  return status.replace("_", " ").toLowerCase();
 }
 
 export default function RequestsTable({ scope, canApprove }: { scope: "all" | "mine" | "queue"; canApprove: boolean }) {
@@ -34,6 +43,7 @@ export default function RequestsTable({ scope, canApprove }: { scope: "all" | "m
   const [error, setError] = useState<string | null>(null);
   const [denying, setDenying] = useState<Req | null>(null); // request whose denial reason is being entered
   const [denyReason, setDenyReason] = useState("");
+  const [viewing, setViewing] = useState<Req | null>(null); // request whose details modal is open
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,17 +120,21 @@ export default function RequestsTable({ scope, canApprove }: { scope: "all" | "m
               <tr key={r.id} className="border-b border-border-soft hover:bg-bg-elev-2/40">
                 <td className="px-4 py-3 text-text-dim">{r.id}</td>
                 <td className="max-w-[220px] truncate px-4 py-3">{r.name}</td>
-                <td className="max-w-[260px] px-4 py-3">
-                  {r.reason
-                    ? <span className="line-clamp-2 text-xs text-text-soft" title={r.reason}>{r.reason}</span>
-                    : <span className="text-text-dim">—</span>}
-                </td>
                 <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {r.logTypes.map((t) => (
-                      <span key={t} className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${r.unauthorizedTypes.includes(t) ? "bg-warn/15 text-warn" : "bg-bg-elev-2 text-text-soft"}`}>{groupLabel(t)}</span>
-                    ))}
-                  </div>
+                  {r.reason ? (
+                    <button onClick={() => setViewing(r)} title="Show the full reason" className="block w-56 text-left text-xs text-text-soft hover:text-text">
+                      <span className="line-clamp-2 break-words">{r.reason}</span>
+                      {(r.reason.length > REASON_PREVIEW || r.reason.includes("\n")) && (
+                        <span className="mt-0.5 block text-[11px] text-accent-2">Read more</span>
+                      )}
+                    </button>
+                  ) : <span className="text-text-dim">—</span>}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <button onClick={() => setViewing(r)} title="Show the log categories in this request"
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${r.unauthorizedTypes.length ? "bg-warn/15 text-warn hover:bg-warn/25" : "bg-bg-elev-2 text-text-soft hover:text-text"}`}>
+                    <List size={13} /> Open <span className="opacity-70">({r.logTypes.length})</span>
+                  </button>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-text-soft"
                   title={`${fmtDateTime(r.fromDate, tz, { seconds: false })} → ${fmtDateTime(r.toDate, tz, { seconds: false })} (server time, ${tz})`}>
@@ -128,11 +142,11 @@ export default function RequestsTable({ scope, canApprove }: { scope: "all" | "m
                 </td>
                 <td className="max-w-[200px] truncate px-4 py-3 font-mono text-xs text-text-soft">{r.searchParams}</td>
                 <td className="px-4 py-3">
-                  <span className={`whitespace-nowrap ${STATUS_STYLE[r.status] ?? ""}`}>{r.status.replace("_", " ").toLowerCase()}</span>
+                  <span className={`whitespace-nowrap ${STATUS_STYLE[r.status] ?? ""}`}>{statusLabel(r.status)}</span>
                   {r.status === "DENIED" && r.denyReason && (
-                    <span className="mt-0.5 line-clamp-2 block max-w-[240px] text-xs text-text-soft" title={r.denyReason}>
-                      &ldquo;{r.denyReason}&rdquo;
-                    </span>
+                    <button onClick={() => setViewing(r)} title="Show the full denial reason" className="mt-0.5 block w-36 text-left text-xs text-text-soft hover:text-text">
+                      <span className="line-clamp-2 break-words">&ldquo;{r.denyReason}&rdquo;</span>
+                    </button>
                   )}
                 </td>
                 <td className="px-4 py-3 text-text-soft">{r.requester}</td>
@@ -140,7 +154,7 @@ export default function RequestsTable({ scope, canApprove }: { scope: "all" | "m
                 <td className="whitespace-nowrap px-4 py-3 text-text-dim">{fmtDateTime(r.createdAt, tz)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   {r.status === "COMPLETE" && (
-                    <span className="inline-flex items-center gap-3">
+                    <span className="inline-flex flex-col items-end gap-1.5">
                       <a href={`/api/export/${r.id}/download?inline=1`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent-2 hover:underline"><Eye size={14} /> View</a>
                       <a href={`/api/export/${r.id}/download`} className="inline-flex items-center gap-1 text-accent-2 hover:underline"><Download size={14} /> Download</a>
                     </span>
@@ -169,6 +183,70 @@ export default function RequestsTable({ scope, canApprove }: { scope: "all" | "m
         </table>
       </div>
 
+      {viewing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setViewing(null)}>
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-border bg-bg-elev p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Request #{viewing.id}</h2>
+              <button onClick={() => setViewing(null)} className="text-text-dim hover:text-text"><X size={18} /></button>
+            </div>
+            <p className="mt-1 text-sm text-text-soft">
+              {viewing.requester} · {viewing.server} · <span className={STATUS_STYLE[viewing.status] ?? ""}>{statusLabel(viewing.status)}</span>
+              {viewing.approver && <> · {viewing.status === "DENIED" ? "denied" : "approved"} by {viewing.approver}</>}
+            </p>
+
+            <div className="mt-4 space-y-4 overflow-y-auto">
+              <div>
+                <h3 className="text-xs uppercase tracking-wider text-text-dim">Reason</h3>
+                <p className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-bg-elev-2 px-3 py-2 text-sm text-text-soft">{viewing.reason || "—"}</p>
+              </div>
+
+              {viewing.status === "DENIED" && viewing.denyReason && (
+                <div>
+                  <h3 className="text-xs uppercase tracking-wider text-text-dim">Reason for denial</h3>
+                  <p className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-bad/10 px-3 py-2 text-sm text-text-soft">{viewing.denyReason}</p>
+                </div>
+              )}
+
+              <div>
+                <h3 className="text-xs uppercase tracking-wider text-text-dim">Log categories ({viewing.logTypes.length})</h3>
+                <ul className="mt-1 space-y-1">
+                  {viewing.logTypes.map((t) => (
+                    <li key={t} className="flex items-center justify-between gap-3 rounded-lg bg-bg-elev-2 px-3 py-2">
+                      <span className="min-w-0">
+                        <span className="block text-sm">{groupLabel(t)}</span>
+                        {GROUP_DESC.get(t) && <span className="block truncate text-[11px] text-text-dim">{GROUP_DESC.get(t)}</span>}
+                      </span>
+                      {viewing.unauthorizedTypes.includes(t) && (
+                        <span className="flex-none rounded bg-warn/15 px-1.5 py-0.5 text-[10px] text-warn">
+                          {viewing.status === "PENDING_APPROVAL" ? "needs approval" : "needed approval"}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-xs uppercase tracking-wider text-text-dim">Search terms</h3>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {viewing.searchParams.split("|").map((t) => t.trim()).filter(Boolean).map((t) => (
+                    <span key={t} className="break-all rounded bg-accent-2/15 px-2 py-1 font-mono text-xs">{t}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xs uppercase tracking-wider text-text-dim">Timeframe <span className="normal-case tracking-normal">· server time ({tz})</span></h3>
+                <p className="mt-1 font-mono text-xs text-text-soft">
+                  {fmtDateTime(viewing.fromDate, tz, { seconds: false })} → {fmtDateTime(viewing.toDate, tz, { seconds: false })}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {denying && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setDenying(null)}>
           <div className="w-full max-w-md rounded-xl border border-border bg-bg-elev p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -178,7 +256,7 @@ export default function RequestsTable({ scope, canApprove }: { scope: "all" | "m
             </div>
             <p className="mt-1 truncate text-sm text-text-soft">{denying.requester} · {denying.name}</p>
             {denying.reason && (
-              <p className="mt-3 rounded-lg bg-bg-elev-2 px-3 py-2 text-xs text-text-soft">
+              <p className="mt-3 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-bg-elev-2 px-3 py-2 text-xs text-text-soft">
                 <span className="text-text-dim">Their reason: </span>{denying.reason}
               </p>
             )}

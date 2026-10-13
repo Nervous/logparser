@@ -211,8 +211,8 @@ export default function Explorer({
           <span className="flex items-center gap-2 font-semibold text-text"><Lock size={14} className="text-warn" /> Live log search is limited to See All roles</span>
           <p className="mt-1">
             Use <span className="font-medium text-text">Build export request</span> to pull a character&apos;s logs for a timeframe.
-            Every request needs a reason; Chatlogs and Admin Logs also need approval from a Senior Admin or above
-            unless you&apos;re Staff Management.
+            Every request needs a reason. Chatlogs also need approval unless you&apos;re a Senior Admin or above,
+            and Admin Logs unless you&apos;re a Lead Admin or above — Staff Management needs neither.
           </p>
         </div>
       )}
@@ -356,7 +356,7 @@ function RequestModal({
         {needsApproval && (
           <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
             {approvalPicked.map((t) => t.label).join(" and ")} {approvalPicked.length > 1 ? "need" : "needs"} approval
-            from a Senior Admin or above — this request goes to the Request Queue.
+            at your rank — this request goes to the Request Queue for a Senior Admin or above.
           </p>
         )}
 

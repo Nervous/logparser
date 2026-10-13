@@ -7,7 +7,7 @@ import { groupOptions, resolveGroupsToPlan } from "@/lib/logGroups";
 import { getRegion } from "@/lib/regions";
 import { searchRecent, volume, type QuerySpec } from "@/lib/loki";
 import { SERVER_TIME_ZONE } from "@/lib/serverTime";
-import { parseTimeInput } from "@/lib/time";
+import { parseRangeEnd, parseTimeInput } from "@/lib/time";
 
 const RANGES: Record<string, number> = {
   "15m": 15 * 60e3, "1h": 60 * 60e3, "6h": 6 * 60 * 60e3,
@@ -39,8 +39,9 @@ export async function GET(req: Request) {
   const now = Date.now();
   // Custom window overrides the preset range when both ends are valid: server-time wall clocks from
   // the pickers ("YYYY-MM-DDTHH:mm", read in SERVER_TIME_ZONE) or ISO with an explicit offset.
+  // The "to" minute is inclusive (23:59 runs to 23:59:59.999).
   const cf = parseTimeInput(url.searchParams.get("from"), SERVER_TIME_ZONE);
-  const ct = parseTimeInput(url.searchParams.get("to"), SERVER_TIME_ZONE);
+  const ct = parseRangeEnd(url.searchParams.get("to"), SERVER_TIME_ZONE);
   const custom = !isNaN(cf) && !isNaN(ct) && cf < ct;
   const range = custom ? "custom" : (url.searchParams.get("range") ?? "6h");
   const toMs = custom ? ct : now;

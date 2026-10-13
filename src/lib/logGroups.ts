@@ -6,6 +6,8 @@
 // Client-safe: pure data + regexes, no fs / no Loki fetch. Flag resolution takes the live flag
 // list as an argument (callers pass getFlags() from the server).
 
+import { ADMIN_LEVEL } from "./adminLevels";
+
 export interface LogGroup {
   key: string;
   label: string;
@@ -56,12 +58,18 @@ export const GROUPS: LogGroup[] = [
     featured: false, flags: /.*/ },
 ];
 
-// Export policy: any group can be exported with a stated reason, EXCEPT these, which need a
-// Senior Admin+ approval — unless the requester holds the UCP STAFFMANAGEMENT flag or See All on
+// Export policy: any group can be exported with a stated reason, EXCEPT these, which go to the
+// Request Queue — unless the requester is at or above the rank listed here (by rankOf, so the
+// developer track slots in), holds the UCP STAFFMANAGEMENT flag at any rank, or has See All on
 // that server (see approvalNeededFor in rbac.ts).
-export const APPROVAL_GROUPS: readonly string[] = ["chatlogs", "adminlogs"];
+export const APPROVAL_EXEMPT_LEVEL: Readonly<Record<string, number>> = {
+  chatlogs: ADMIN_LEVEL.SENIORADMIN,
+  adminlogs: ADMIN_LEVEL.LEADADMIN,
+};
+export const APPROVAL_GROUPS: readonly string[] = Object.keys(APPROVAL_EXEMPT_LEVEL);
 
 const BY_KEY = new Map(GROUPS.map((g) => [g.key, g]));
+const FEATURED = GROUPS.filter((g) => g.featured);
 
 export function groupLabel(key: string): string {
   return BY_KEY.get(key)?.label ?? key;
@@ -92,7 +100,11 @@ function memberFlags(group: LogGroup, allFlags: string[]): string[] {
     // catch-all = flags claimed by no earlier group
     return allFlags.filter((f) => groupOfFlag(f).key === "system");
   }
-  return allFlags.filter((f) => group.flags.test(f));
+  const own = allFlags.filter((f) => group.flags.test(f));
+  // A featured group owns its flags outright — the broad categories' loose regexes must not pull
+  // them in as well. /character/ also matches "characterchat", which listed chat lines under
+  // Character & Roleplay and let them be exported without the Chatlogs approval.
+  return group.featured ? own : own.filter((f) => !FEATURED.some((g) => g.flags.test(f)));
 }
 
 // Resolve selected group keys into merged Loki sub-queries against the live flag list.

@@ -150,6 +150,14 @@ export function parseTimeInput(s: unknown, tz: string): number {
   return NaN;
 }
 
+// The END of a range: like parseTimeInput, but a minute-precision picker value covers that whole
+// minute — "…T23:59" runs through 23:59:59.999, so a To of 23:59 includes the day's last minute.
+// Values with seconds, and ISO timestamps, are taken exactly.
+export function parseRangeEnd(s: unknown, tz: string): number {
+  const ms = parseTimeInput(s, tz);
+  return typeof s === "string" && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}$/.test(s.trim()) ? ms + 59_999 : ms;
+}
+
 // Midnight starting the `tz` day / month that contains an instant.
 export function startOfDay(ms: number, tz: string): number {
   const w = wallClockAt(ms, tz);

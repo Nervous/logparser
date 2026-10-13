@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
-import { APPROVAL_GROUPS } from "./logGroups";
+import { rankOf } from "./adminLevels";
+import { APPROVAL_EXEMPT_LEVEL, APPROVAL_GROUPS } from "./logGroups";
 
 // Reserved logTypeKey meaning "Can See All Activity" for that (role, server).
 export const SEE_ALL_KEY = "__all__";
@@ -10,6 +11,7 @@ export interface EffectivePermissions {
   isManager: boolean;
   isSuperAdmin: boolean;
   isStaffManagement: boolean; // UCP STAFFMANAGEMENT account flag (synced at sign-in)
+  adminLevel: number; // UCP AdminLevel (synced at sign-in)
 }
 
 // A user's effective permissions ON ONE SERVER = the UNION of their roles' allowed groups for that
@@ -40,13 +42,16 @@ export async function effectivePermissions(userId: number, server: string): Prom
     isManager: user?.isManager ?? false,
     isSuperAdmin: user?.isSuperAdmin ?? false,
     isStaffManagement: user?.isStaffManagement ?? false,
+    adminLevel: user?.adminLevel ?? 0,
   };
 }
 
 // The requested groups an export must send to the request queue. Anything may be exported with a
-// reason; only the approval groups (Chatlogs, Admin Logs) need sign-off — and not for Staff
-// Management (any rank) or See-All users, who can already read those logs directly.
+// reason; only the approval groups need sign-off, and each only below its own rank: Chatlogs
+// below Senior Admin, Admin Logs below Lead Admin. Staff Management (any rank) and See-All users,
+// who can already read those logs directly, never need it.
 export function approvalNeededFor(requested: string[], perms: EffectivePermissions): string[] {
   if (perms.seeAll || perms.isStaffManagement) return [];
-  return requested.filter((k) => APPROVAL_GROUPS.includes(k));
+  const rank = rankOf(perms.adminLevel);
+  return requested.filter((k) => APPROVAL_GROUPS.includes(k) && rank < rankOf(APPROVAL_EXEMPT_LEVEL[k]));
 }

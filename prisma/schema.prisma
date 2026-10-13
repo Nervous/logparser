@@ -1,8 +1,9 @@
 // explore.gta.world — log browser & export tool
 // Permissions are PER-ROLE (roles sourced from the UCP / DB); users inherit their role's
 // allowed log types. Managers edit role permissions. Live search is See-All only. Every export
-// needs a stated reason; exports touching Chatlogs / Admin Logs go into an approval queue
-// (Senior Admin+) unless the requester is Staff Management or has See All on that server.
+// needs a stated reason; exports touching Chatlogs (below Senior Admin) / Admin Logs (below Lead
+// Admin) go into an approval queue unless the requester is Staff Management or has See All on
+// that server.
 
 generator client {
   provider = "prisma-client-js"
